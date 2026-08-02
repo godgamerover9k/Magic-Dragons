@@ -181,12 +181,13 @@ check("base elements are their own branch inside Elemental", () => {
     "earth-dragon",
     "fire-dragon",
     "inferno-dragon",
+    "metal-dragon",
     "water-dragon",
   ]);
 });
 
 check("hybrids sit under Elemental too", () => {
-  for (const id of ["lava-dragon", "metal-dragon", "elemental-dragon"]) {
+  for (const id of ["lava-dragon", "elemental-dragon"]) {
     const s = pack.species[id];
     assert.ok(isWithin(pack, s.taxonId, "elemental"), `${s.name} left the branch`);
     assert.ok(
@@ -358,6 +359,20 @@ check("inferno counts as a base element", () => {
     );
 });
 
+check("metal is adopted into earth", () => {
+  assert.strictEqual(pack.species["metal-dragon"].taxonId, "earth");
+  assert.strictEqual(combo("metal-dragon", "earth-dragon", "elemental-dragon"), 0);
+  for (const other of ["fire-dragon", "water-dragon", "air-dragon"])
+    assert.ok(combo("metal-dragon", other, "elemental-dragon") > 0, `metal x ${other}`);
+});
+
+check("metal is an earth dragon", () => {
+  assert.strictEqual(pack.species["metal-dragon"].taxonId, "earth");
+  assert.strictEqual(combo("metal-dragon", "earth-dragon", "elemental-dragon"), 0);
+  for (const other of ["fire-dragon", "water-dragon", "air-dragon"])
+    assert.ok(combo("metal-dragon", other, "elemental-dragon") > 0, `metal x ${other}`);
+});
+
 check("two dragons of the same element cannot cross", () => {
   // Inferno is filed inside Fire, so it is the same element as a Fire Dragon
   // however different the two are as dragons.
@@ -394,7 +409,7 @@ check("the element is found however deeply a dragon is nested", () => {
 });
 
 check("dragons outside the branch cannot stand in for a base element", () => {
-  for (const id of ["lava-dragon", "plant-dragon", "metal-dragon", "life-dragon"]) {
+  for (const id of ["lava-dragon", "plant-dragon", "life-dragon", "monster-dragon"]) {
     assert.strictEqual(
       combo("fire-dragon", id, "elemental-dragon"),
       0,

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 21,
+  "version": 22,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -265,7 +265,7 @@
     "metal-dragon": {
       "id": "metal-dragon",
       "name": "Metal Dragon",
-      "taxonId": "hybrid",
+      "taxonId": "earth",
       "color": "#A8B0BA",
       "baseProduction": 1400,
       "incubationSeconds": 6300,
