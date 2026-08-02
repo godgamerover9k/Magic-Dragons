@@ -2,7 +2,7 @@
 // Dragonkeep — core data model
 //
 // Two things live side by side:
-//   ContentPack — the game's DESIGN (taxonomy, species, rarities, rules, balance)
+//   ContentPack — the game's DESIGN (taxonomy, dragons, rules, balance)
 //   SaveGame    — one PLAYER's progress (their dragons, coins, buildings)
 //
 // A ContentPack is fully editable in Admin mode and can be downloaded as JSON.
@@ -10,7 +10,6 @@
 
 export type TaxonId = string;
 export type SpeciesId = string;
-export type RarityId = string;
 
 // --- Taxonomy --------------------------------------------------------------
 // An arbitrary-depth tree. Any node can have children; depth is not fixed and
@@ -54,32 +53,14 @@ export interface IvConfig {
   growthMagnitude: number;
 }
 
-// --- Rarity ----------------------------------------------------------------
-
-export interface Rarity {
-  id: RarityId;
-  name: string;
-  /** Sort order, low = common. */
-  order: number;
-  /** Hex colour used throughout the UI for this rarity. */
-  color: string;
-  /** Multiplies coin production. */
-  productionMultiplier: number;
-  /** Multiplies XP required per level. */
-  xpMultiplier: number;
-  /** Duplicates consumed to merge up one tier. Index 0 = tier 1 -> 2. */
-  mergeCosts: number[];
-  /** Highest tier a dragon of this rarity can reach. */
-  maxTier: number;
-}
-
 // --- Species (the template) ------------------------------------------------
 
 export interface Species {
   id: SpeciesId;
   name: string;
   taxonId: TaxonId;
-  rarityId: RarityId;
+  /** Accent colour in the interface. Falls back to a neutral tone. */
+  color?: string;
   /** Free-form labels for breeding rules and filtering, e.g. "nocturnal". */
   tags: string[];
   /** Coins per hour at tier 1, level 1, before any multipliers. */
@@ -99,6 +80,12 @@ export interface Species {
    * scale, so a high-level dragon fills it faster and faster.
    */
   coinCapacity?: number;
+  /** Multiplies the xp needed per level. Falls back to 1. */
+  xpMultiplier?: number;
+  /** Duplicates per tier step. Falls back to balance.mergeCosts. */
+  mergeCosts?: number[];
+  /** Highest tier this dragon can reach. Falls back to balance.maxTier. */
+  maxTier?: number;
   /** Shown in the Codex. */
   description: string;
   /** Buyable in the Market; 0 or undefined means not for sale. */
@@ -170,7 +157,7 @@ export interface PowerFormula {
 }
 
 /**
- * Output = base × rarity × IV × power ^ exponent.
+ * Output = base × IV × power ^ exponent.
  * An exponent below 1 gives diminishing returns, so grinding levels onto a weak
  * dragon cannot catch a rare one.
  */
@@ -228,6 +215,11 @@ export interface BalanceConfig {
   /** Base storage, in hours of output, for a level 1 tier 1 dragon. */
   coinStorageHours: number;
 
+  /** Default duplicates per tier step, when a dragon does not set its own. */
+  mergeCosts: number[];
+  /** Default ceiling on tiers. */
+  maxTier: number;
+
   levelXpBase: number;
   levelXpExponent: number;
   maxLevel: number;
@@ -253,7 +245,6 @@ export interface ContentPack {
   schemaVersion: number;
   name: string;
   taxa: Record<TaxonId, Taxon>;
-  rarities: Record<RarityId, Rarity>;
   species: Record<SpeciesId, Species>;
   /** What the one IV number does. Renaming it renames it everywhere. */
   iv: IvConfig;

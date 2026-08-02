@@ -12,7 +12,7 @@ import {
   powerOf,
   tierOneCost,
   pendingCoins,
-  rarityOf,
+  colorOf,
   speciesOf,
   timeUntilFull,
   xpToNextLevel,
@@ -30,7 +30,7 @@ import { taxonPath } from "@/game/taxonomy";
 import { IV_MAX } from "@/game/types";
 import type { ContentPack, Dragon } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Bar, Button, Empty, Panel, RarityChip, SectionHeading } from "./ui";
+import { Bar, Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function RoostTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
@@ -119,7 +119,7 @@ function DragonCard({
 }) {
   const { pack, save, now, act } = game;
   const species = speciesOf(pack, dragon);
-  const rarity = rarityOf(pack, dragon);
+    const color = colorOf(pack, dragon.speciesId);
   if (!save || !species) return null;
 
   const rate = coinsPerHour(pack, dragon);
@@ -152,7 +152,7 @@ function DragonCard({
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="num text-sm" style={{ color: rarity?.color }}>
+            <p className="num text-sm" style={{ color: color }}>
               T{dragon.tier} · L{dragon.level}
             </p>
             <p className="num text-[11px] text-muted">{formatNumber(rate)}/hr</p>
@@ -160,7 +160,7 @@ function DragonCard({
         </div>
 
         <div className="mt-2.5 flex items-center gap-2">
-          <RarityChip rarity={rarity} />
+          
           <span className="eyebrow">
             IV {dragon.iv}/{IV_MAX}
           </span>
@@ -170,7 +170,7 @@ function DragonCard({
         </div>
 
         <div className="mt-2 space-y-1.5">
-          <Bar value={banked} max={cap} color={rarity?.color} />
+          <Bar value={banked} max={cap} color={color} />
           {!atMax && <Bar value={dragon.xp} max={need} />}
         </div>
       </button>
@@ -224,7 +224,7 @@ function DragonCard({
             {cost !== null && (
               <p className="mb-1.5 text-[11px] text-muted">
                 A tier {dragon.tier + 1} is{" "}
-                {formatNumber(tierOneCost(pack, species.rarityId, dragon.tier + 1))} tier 1
+                {formatNumber(tierOneCost(pack, species.id, dragon.tier + 1))} tier 1
                 dragons all told, since each step eats duplicates of the tier below.
               </p>
             )}

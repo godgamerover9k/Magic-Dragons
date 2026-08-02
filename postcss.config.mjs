@@ -5,13 +5,20 @@ Dragon -> Elemental -> Fire/Earth/Water/Air tree, and one breeding rule of each
 kind. They exist so every system has something to stand on and so the shape of
 each rule is visible. Replace all of it in Admin.
 
-| Dragon | Element | Price | Base coins/hr |
-|---|---|---|---|
-| Fire Dragon | Fire | 250 | 20 |
-| Earth Dragon | Earth | 500 | 24 |
-| Water Dragon | Water | 900 | 28 |
-| Air Dragon | Air | bred only | 48 |
-| Elder Dragon | Elemental | bred only | 400 |
+| Dragon | Element | Price | Coins/min | Fills in |
+|---|---|---|---|---|
+| Fire Dragon | Fire | 2,250 | 3.0 | 20 min |
+| Earth Dragon | Earth | 4,500 | 3.6 | 24 min |
+| Water Dragon | Water | 8,100 | 4.2 | 30 min |
+| Air Dragon | Air | bred only | 9.7 | 45 min |
+| Elder Dragon | Elemental | bred only | 228 | 90 min |
+
+There are no rarity tiers. Every dragon states its own output outright, and can
+optionally set its own accent colour, xp multiplier, merge costs, max tier,
+storage and incubation. Anything left unset falls back to Balance.
+
+Figures are at tier 1, level 1, IV 0. A fully raised Fire Dragon runs about
+20 coins/min and holds about 3 hours of output.
 
 A text-based dragon collecting game. Next.js App Router, deployable to Vercel as-is.
 
@@ -20,7 +27,7 @@ A text-based dragon collecting game. Next.js App Router, deployable to Vercel as
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm run check    # engine self-tests (72 checks)
+npm run check    # engine self-tests (78 checks)
 npm run build    # production build
 ```
 

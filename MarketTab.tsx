@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
+import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
 import { childrenOf, roots, speciesInTaxon } from "@/game/taxonomy";
 import type { Species, Taxon } from "@/game/types";
 import type { Game } from "@/game/useGame";
@@ -134,7 +134,7 @@ function SpeciesRow({
   const { pack, save } = game;
   const known = save?.discovered.includes(species.id) ?? false;
   const owned = save?.dragons.filter((d) => d.speciesId === species.id) ?? [];
-  const rarity = pack.rarities[species.rarityId];
+  const color = colorOf(pack, species.id);
   const best = owned.reduce(
     (acc, d) => (d.tier > acc.tier || (d.tier === acc.tier && d.level > acc.level) ? d : acc),
     owned[0],
@@ -150,7 +150,7 @@ function SpeciesRow({
       >
         <span
           className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ background: known ? rarity?.color : "var(--color-line)" }}
+          style={{ background: known ? color : "var(--color-line)" }}
         />
         <span className={`truncate text-sm ${known ? "" : "text-muted/50"}`}>
           {known ? species.name : "—— unrecorded ——"}
@@ -167,9 +167,6 @@ function SpeciesRow({
         <div className="mb-2 rounded border border-line bg-raised p-2.5">
           <p className="text-[11px] leading-snug text-muted">{species.description}</p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-            <span className="num" style={{ color: rarity?.color }}>
-              {rarity?.name}
-            </span>
             <span className="num text-muted">
               {formatNumber(species.baseProduction)} base coins/hr
             </span>

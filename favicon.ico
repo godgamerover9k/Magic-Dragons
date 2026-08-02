@@ -1,10 +1,10 @@
 "use client";
 
-import { formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
+import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
 import { buySpecies } from "@/game/engine";
 import { taxonPath } from "@/game/taxonomy";
 import type { Game } from "@/game/useGame";
-import { Button, Empty, Panel, RarityChip, SectionHeading } from "./ui";
+import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function MarketTab({ game }: { game: Game }) {
   const { pack, save, act } = game;
@@ -34,7 +34,7 @@ export function MarketTab({ game }: { game: Game }) {
       )}
 
       {forSale.map((species) => {
-        const rarity = pack.rarities[species.rarityId];
+
         const owned = save.dragons.filter((d) => d.speciesId === species.id).length;
         return (
           <Panel key={species.id} className="p-3">
@@ -45,7 +45,7 @@ export function MarketTab({ game }: { game: Game }) {
                   {taxonPath(pack, species.taxonId)}
                 </p>
               </div>
-              <RarityChip rarity={rarity} />
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: colorOf(pack, species.id) }} />
             </div>
             <p className="mt-2 text-xs text-muted">{species.description}</p>
             <div className="mt-2.5 flex items-center justify-between gap-3">

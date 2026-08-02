@@ -160,12 +160,6 @@ export function validatePack(pack: ContentPack): Issue[] {
         where: species.name,
         message: "Sits in a taxon that no longer exists.",
       });
-    if (!pack.rarities[species.rarityId])
-      issues.push({
-        level: "error",
-        where: species.name,
-        message: "Has a rarity that no longer exists.",
-      });
     if (species.baseProduction <= 0)
       issues.push({
         level: "warning",

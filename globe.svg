@@ -1,4 +1,4 @@
-import type { BreedingRule, ContentPack, Rarity, Species, Taxon } from "./types";
+import type { BreedingRule, ContentPack, Species, Taxon } from "./types";
 
 export const SCHEMA_VERSION = 3;
 
@@ -34,16 +34,6 @@ const taxa: Taxon[] = [
   { id: "air", name: "Air", parentId: "elemental", rank: "Element", description: "", custom: {} },
 ];
 
-// Rarities are structure rather than content, so these are real. Retune freely.
-const rarities: Rarity[] = [
-  { id: "common", name: "Common", order: 1, color: "#8A93A6", productionMultiplier: 1, xpMultiplier: 1, mergeCosts: [2, 3, 4, 5], maxTier: 5 },
-  { id: "uncommon", name: "Uncommon", order: 2, color: "#5FA98A", productionMultiplier: 1.35, xpMultiplier: 1.25, mergeCosts: [2, 3, 4, 5], maxTier: 5 },
-  { id: "rare", name: "Rare", order: 3, color: "#4E86C7", productionMultiplier: 1.9, xpMultiplier: 1.6, mergeCosts: [2, 3, 4, 6], maxTier: 5 },
-  { id: "epic", name: "Epic", order: 4, color: "#9B6BC9", productionMultiplier: 2.7, xpMultiplier: 2.1, mergeCosts: [3, 4, 5, 7], maxTier: 5 },
-  { id: "legendary", name: "Legendary", order: 5, color: "#D9A441", productionMultiplier: 3.8, xpMultiplier: 2.8, mergeCosts: [3, 4, 6, 8], maxTier: 5 },
-  { id: "mythic", name: "Mythic", order: 6, color: "#C8536B", productionMultiplier: 5.5, xpMultiplier: 3.6, mergeCosts: [4, 5, 7, 10], maxTier: 5 },
-];
-
 const PLACEHOLDER = "Placeholder. Replace this dragon in Admin.";
 
 const species: Species[] = [
@@ -51,12 +41,12 @@ const species: Species[] = [
     id: "fire-dragon",
     name: "Fire Dragon",
     taxonId: "fire",
-    rarityId: "common",
+    color: "#D9633F",
     tags: ["example-tag"],
-    baseProduction: 20,
+    baseProduction: 180,
     incubationSeconds: 60,
     obtainable: true,
-    marketPrice: 250,
+    marketPrice: 2250,
     description: PLACEHOLDER,
     custom: {},
   },
@@ -64,12 +54,13 @@ const species: Species[] = [
     id: "earth-dragon",
     name: "Earth Dragon",
     taxonId: "earth",
-    rarityId: "common",
+    color: "#7E9B62",
     tags: [],
-    baseProduction: 24,
+    baseProduction: 216,
+    coinStorageHours: 0.4,
     incubationSeconds: 120,
     obtainable: true,
-    marketPrice: 500,
+    marketPrice: 4500,
     description: PLACEHOLDER,
     custom: {},
   },
@@ -77,12 +68,13 @@ const species: Species[] = [
     id: "water-dragon",
     name: "Water Dragon",
     taxonId: "water",
-    rarityId: "common",
+    color: "#4E86C7",
     tags: [],
-    baseProduction: 28,
+    baseProduction: 252,
+    coinStorageHours: 0.5,
     incubationSeconds: 300,
     obtainable: true,
-    marketPrice: 900,
+    marketPrice: 8100,
     description: PLACEHOLDER,
     custom: {},
   },
@@ -90,9 +82,11 @@ const species: Species[] = [
     id: "air-dragon",
     name: "Air Dragon",
     taxonId: "air",
-    rarityId: "uncommon",
+    color: "#9FB6C9",
     tags: ["example-tag"],
-    baseProduction: 48,
+    baseProduction: 583,
+    xpMultiplier: 1.25,
+    coinStorageHours: 0.75,
     incubationSeconds: 600,
     obtainable: true,
     description: PLACEHOLDER + " Not sold — bred only.",
@@ -102,9 +96,12 @@ const species: Species[] = [
     id: "elder-dragon",
     name: "Elder Dragon",
     taxonId: "elemental",
-    rarityId: "legendary",
+    color: "#D9A441",
     tags: [],
-    baseProduction: 400,
+    baseProduction: 13680,
+    xpMultiplier: 2.8,
+    mergeCosts: [3, 4, 6, 8],
+    coinStorageHours: 1.5,
     incubationSeconds: 3600,
     obtainable: true,
     description: PLACEHOLDER + " Sits on the Elemental branch rather than in any one element.",
@@ -166,7 +163,6 @@ export function defaultContentPack(): ContentPack {
     schemaVersion: SCHEMA_VERSION,
     name: "Elemental placeholder set",
     taxa: Object.fromEntries(taxa.map((t) => [t.id, t])),
-    rarities: Object.fromEntries(rarities.map((r) => [r.id, r])),
     species: Object.fromEntries(species.map((s) => [s.id, s])),
     iv: {
       name: "Individual Value",
@@ -180,12 +176,12 @@ export function defaultContentPack(): ContentPack {
     },
     breedingRules,
     balance: {
-      startingCoins: 600,
+      startingCoins: 5400,
       startingFood: 60,
       startingSpecies: ["fire-dragon", "earth-dragon"],
       roostCapacity: 6,
-      roostSlotCost: 800,
-      // Quadratic: 800, 3200, 7200, 12800, 20000 …
+      roostSlotCost: 7200,
+      // Quadratic: 7200, 28800, 64800, 115200 …
       roostSlotCostExponent: 2,
 
       // Level and tier become one number. A tier step is worth twelve levels,
@@ -193,9 +189,13 @@ export function defaultContentPack(): ContentPack {
       power: { tierWeight: 12 },
       // Both exponents sit below 1, so power has diminishing returns. Capacity's
       // is the higher of the two, so a raised dragon holds more hours of output.
-      production: { exponent: 0.29 },
-      capacity: { exponent: 0.42 },
-      coinStorageHours: 6,
+      production: { exponent: 0.139 },
+      capacity: { exponent: 0.30 },
+      coinStorageHours: 1 / 3,
+
+      // Defaults for any dragon that does not set its own.
+      mergeCosts: [2, 3, 4, 5],
+      maxTier: 5,
 
       levelXpBase: 50,
       levelXpExponent: 1.45,
@@ -205,7 +205,7 @@ export function defaultContentPack(): ContentPack {
       defaultIncubationSeconds: 60,
 
       maxBakeries: 3,
-      bakeryCost: 350,
+      bakeryCost: 3150,
       bakeryCostGrowth: 3,
       foodTypes: [
         { id: "food-1", name: "Placeholder Food 1", foodCost: 5, xp: 12 },
@@ -217,9 +217,9 @@ export function defaultContentPack(): ContentPack {
       // coins. Each step up costs more, takes longer, and pays better per minute.
       foodBatches: [
         { id: "batch-1", name: "Scraps", coinCost: 0, seconds: 120, food: 12 },
-        { id: "batch-2", name: "Small Order", coinCost: 150, seconds: 600, food: 80 },
-        { id: "batch-3", name: "Standing Order", coinCost: 900, seconds: 3600, food: 600 },
-        { id: "batch-4", name: "Banquet", coinCost: 5000, seconds: 21600, food: 4500 },
+        { id: "batch-2", name: "Small Order", coinCost: 1350, seconds: 600, food: 80 },
+        { id: "batch-3", name: "Standing Order", coinCost: 8100, seconds: 3600, food: 600 },
+        { id: "batch-4", name: "Banquet", coinCost: 45000, seconds: 21600, food: 4500 },
       ],
     },
     custom: {},

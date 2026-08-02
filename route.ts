@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { Rarity } from "@/game/types";
 
 export function Panel({
   children,
@@ -72,21 +71,6 @@ export function Button({
     >
       {children}
     </button>
-  );
-}
-
-export function RarityChip({ rarity }: { rarity?: Rarity }) {
-  if (!rarity) return null;
-  return (
-    <span
-      className="eyebrow rounded px-1.5 py-0.5"
-      style={{
-        color: rarity.color,
-        backgroundColor: `${rarity.color}1a`,
-      }}
-    >
-      {rarity.name}
-    </span>
   );
 }
 

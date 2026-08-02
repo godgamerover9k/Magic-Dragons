@@ -20,7 +20,6 @@ import type {
   BreedingRule,
   ContentPack,
   Matcher,
-  Rarity,
   SaveGame,
   Species,
   Taxon,
@@ -137,10 +136,6 @@ export function AdminTab({ game }: { game: Game }) {
 
       <Section title="Individual value">
         <IvEditor pack={pack} edit={edit} />
-      </Section>
-
-      <Section title={`Rarities · ${Object.keys(pack.rarities).length}`}>
-        <RarityEditor pack={pack} edit={edit} />
       </Section>
 
       <Section title="Balance">
@@ -488,12 +483,11 @@ function SpeciesEditor({
   const create = () => {
     const id = uniqueId("new-dragon", pack.species);
     const firstTaxon = Object.keys(pack.taxa)[0];
-    const firstRarity = Object.values(pack.rarities).sort((a, b) => a.order - b.order)[0];
     const draft: Species = {
       id,
       name: "New Dragon",
       taxonId: firstTaxon,
-      rarityId: firstRarity?.id ?? "common",
+      color: "#8A93A6",
       tags: [],
       baseProduction: 25,
       description: "",
@@ -565,19 +559,13 @@ function SpeciesEditor({
                 ))}
               </select>
             </Field>
-            <Field label="Rarity">
-              <select
-                value={species.rarityId}
-                onChange={(e) => update({ rarityId: e.target.value })}
-              >
-                {Object.values(pack.rarities)
-                  .sort((a, b) => a.order - b.order)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-              </select>
+            <Field label="Accent colour">
+              <input
+                type="color"
+                className="h-9 p-0.5"
+                value={species.color ?? "#8A93A6"}
+                onChange={(e) => update({ color: e.target.value })}
+              />
             </Field>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -1032,90 +1020,6 @@ function IvEditor({
         {(iv.productionMagnitude * 100).toFixed(0)}% more coins and{" "}
         {(iv.growthMagnitude * 100).toFixed(0)}% more xp than one at 0.
       </p>
-    </div>
-  );
-}
-
-function RarityEditor({
-  pack,
-  edit,
-}: {
-  pack: ContentPack;
-  edit: (fn: (p: ContentPack) => ContentPack) => void;
-}) {
-  const update = (id: string, patch: Partial<Rarity>) =>
-    edit((p) => ({
-      ...p,
-      rarities: { ...p.rarities, [id]: { ...p.rarities[id], ...patch } },
-    }));
-
-  return (
-    <div className="space-y-3">
-      {Object.values(pack.rarities)
-        .sort((a, b) => a.order - b.order)
-        .map((r) => (
-          <div key={r.id} className="rounded border border-line p-2.5">
-            <div className="flex items-center gap-2">
-              <span
-                className="h-3 w-3 shrink-0 rounded-full"
-                style={{ background: r.color }}
-              />
-              <input
-                value={r.name}
-                onChange={(e) => update(r.id, { name: e.target.value })}
-              />
-              <input
-                type="color"
-                className="h-8 w-12 shrink-0 p-0.5"
-                value={r.color}
-                onChange={(e) => update(r.id, { color: e.target.value })}
-              />
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <Field label="Coin multiplier">
-                <input
-                  type="number"
-                  step="0.05"
-                  value={r.productionMultiplier}
-                  onChange={(e) =>
-                    update(r.id, { productionMultiplier: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="XP multiplier">
-                <input
-                  type="number"
-                  step="0.05"
-                  value={r.xpMultiplier}
-                  onChange={(e) => update(r.id, { xpMultiplier: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Max tier">
-                <input
-                  type="number"
-                  value={r.maxTier}
-                  onChange={(e) => update(r.id, { maxTier: Number(e.target.value) })}
-                />
-              </Field>
-              <Field
-                label="Merge costs"
-                hint="Duplicates per tier step, comma separated."
-              >
-                <input
-                  value={r.mergeCosts.join(", ")}
-                  onChange={(e) =>
-                    update(r.id, {
-                      mergeCosts: e.target.value
-                        .split(",")
-                        .map((n) => Number(n.trim()))
-                        .filter((n) => Number.isFinite(n) && n > 0),
-                    })
-                  }
-                />
-              </Field>
-            </div>
-          </div>
-        ))}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import type {
   Dragon,
   FoodBatch,
   ProductionFormula,
-  Rarity,
   SaveGame,
   Species,
 } from "./types";
@@ -14,11 +13,6 @@ export const HOUR_MS = 3_600_000;
 
 export function speciesOf(pack: ContentPack, dragon: Dragon): Species | undefined {
   return pack.species[dragon.speciesId];
-}
-
-export function rarityOf(pack: ContentPack, dragon: Dragon): Rarity | undefined {
-  const species = speciesOf(pack, dragon);
-  return species ? pack.rarities[species.rarityId] : undefined;
 }
 
 // --- Individual values -----------------------------------------------------
@@ -57,20 +51,19 @@ export function powerOf(pack: ContentPack, dragon: Dragon): number {
 }
 
 /**
- * coins/hr = base × rarity × (1 + IV bonus) × power ^ exponent
+ * coins/hr = base × (1 + IV bonus) × power ^ exponent
  *
- * The exponent sits below 1, so power has diminishing returns and a heavily
- * levelled common never overtakes a fresh legendary.
+ * Each dragon's output is set outright by its own baseProduction. The exponent
+ * sits below 1, so power has diminishing returns and a heavily raised weak
+ * dragon never overtakes a fresh strong one.
  */
 export function coinsPerHour(pack: ContentPack, dragon: Dragon): number {
   const species = speciesOf(pack, dragon);
-  const rarity = rarityOf(pack, dragon);
-  if (!species || !rarity) return 0;
+  if (!species) return 0;
 
   const exponent = species.productionOverrides?.exponent ?? pack.balance.production.exponent;
   const raw =
     species.baseProduction *
-    rarity.productionMultiplier *
     (1 + ivBonus(pack, dragon, "production")) *
     Math.pow(powerOf(pack, dragon), exponent);
 
@@ -86,13 +79,11 @@ export function coinCap(pack: ContentPack, dragon: Dragon): number {
   if (species?.coinCapacity && species.coinCapacity > 0)
     return Math.round(species.coinCapacity);
 
-  const rarity = rarityOf(pack, dragon);
-  if (!species || !rarity) return 0;
+  if (!species) return 0;
 
   const hours = species.coinStorageHours ?? pack.balance.coinStorageHours;
   const raw =
     species.baseProduction *
-    rarity.productionMultiplier *
     (1 + ivBonus(pack, dragon, "production")) *
     Math.max(hours, 0) *
     Math.pow(powerOf(pack, dragon), pack.balance.capacity.exponent);
@@ -136,8 +127,7 @@ export function xpToNextLevel(
   pack: ContentPack,
   dragon: Dragon,
 ): number {
-  const rarity = rarityOf(pack, dragon);
-  const mult = rarity?.xpMultiplier ?? 1;
+  const mult = speciesOf(pack, dragon)?.xpMultiplier ?? 1;
   const { levelXpBase, levelXpExponent } = pack.balance;
   return Math.round(levelXpBase * Math.pow(dragon.level, levelXpExponent) * mult);
 }
@@ -168,12 +158,20 @@ export function grantXp(
 
 // --- Merging ---------------------------------------------------------------
 
+/** A dragon's own merge costs, or the global default. */
+export function mergeCostsFor(pack: ContentPack, speciesId: string): number[] {
+  const own = pack.species[speciesId]?.mergeCosts;
+  return own && own.length > 0 ? own : pack.balance.mergeCosts;
+}
+
+export function maxTierFor(pack: ContentPack, speciesId: string): number {
+  return pack.species[speciesId]?.maxTier ?? pack.balance.maxTier;
+}
+
 export function mergeCost(pack: ContentPack, dragon: Dragon): number | null {
-  const rarity = rarityOf(pack, dragon);
-  if (!rarity) return null;
-  if (dragon.tier >= rarity.maxTier) return null;
-  const index = dragon.tier - 1;
-  return rarity.mergeCosts[index] ?? rarity.mergeCosts[rarity.mergeCosts.length - 1] ?? 2;
+  if (dragon.tier >= maxTierFor(pack, dragon.speciesId)) return null;
+  const costs = mergeCostsFor(pack, dragon.speciesId);
+  return costs[dragon.tier - 1] ?? costs[costs.length - 1] ?? 2;
 }
 
 /**
@@ -181,15 +179,19 @@ export function mergeCost(pack: ContentPack, dragon: Dragon): number | null {
  * consumes duplicates *of the tier below*, the cost compounds: with costs of
  * 2, 3, 4 a tier 4 dragon is 3 × 4 × 5 = 60 tier 1 dragons.
  */
-export function tierOneCost(pack: ContentPack, rarityId: string, tier: number): number {
-  const rarity = pack.rarities[rarityId];
-  if (!rarity) return 1;
+export function tierOneCost(pack: ContentPack, speciesId: string, tier: number): number {
+  const costs = mergeCostsFor(pack, speciesId);
   let total = 1;
   for (let step = 0; step < tier - 1; step++) {
-    const cost = rarity.mergeCosts[step] ?? rarity.mergeCosts[rarity.mergeCosts.length - 1] ?? 2;
+    const cost = costs[step] ?? costs[costs.length - 1] ?? 2;
     total *= cost + 1;
   }
   return total;
+}
+
+/** Accent colour for a dragon, falling back to a neutral tone. */
+export function colorOf(pack: ContentPack, speciesId: string): string {
+  return pack.species[speciesId]?.color || "#8A93A6";
 }
 
 /** Duplicates that may legally be consumed to raise this dragon's tier. */

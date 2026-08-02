@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { buildPool } from "@/game/breeding";
-import { formatDuration, rarityOf } from "@/game/economy";
+import { colorOf, formatDuration } from "@/game/economy";
 import { cancelBreeding, claimHatchling, nameOf, startBreeding } from "@/game/engine";
 import { taxonPath } from "@/game/taxonomy";
 import type { Dragon } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Button, Empty, Panel, RarityChip, SectionHeading } from "./ui";
+import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function BreedTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
@@ -93,13 +93,12 @@ export function BreedTab({ game }: { game: Game }) {
           <ul className="space-y-1.5">
             {pool.entries.map((entry) => {
               const species = pack.species[entry.speciesId];
-              const rarity = pack.rarities[species.rarityId];
-              const pct = (entry.weight / pool.totalWeight) * 100;
+                            const pct = (entry.weight / pool.totalWeight) * 100;
               return (
                 <li key={entry.speciesId} className="flex items-center gap-2 text-sm">
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: rarity?.color }}
+                    style={{ background: colorOf(pack, species.id) }}
                   />
                   <span className="truncate">{species.name}</span>
                   <span className="truncate text-[11px] text-muted">
@@ -143,7 +142,7 @@ export function BreedTab({ game }: { game: Game }) {
         <div className="space-y-1.5">
           {save.dragons.map((d) => {
             const selected = d.id === a || d.id === b;
-            const rarity = rarityOf(pack, d);
+            
             return (
               <button
                 key={d.id}
@@ -155,7 +154,7 @@ export function BreedTab({ game }: { game: Game }) {
               >
                 <span
                   className="h-6 w-0.5 shrink-0 rounded"
-                  style={{ background: rarity?.color }}
+                  style={{ background: colorOf(pack, d.speciesId) }}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{nameOf(pack, d)}</span>
@@ -194,7 +193,7 @@ function Slot({
         <>
           <p className="mt-1 truncate font-display text-sm">{nameOf(pack, dragon)}</p>
           <div className="mt-1.5 flex items-center gap-2">
-            <RarityChip rarity={rarityOf(pack, dragon)} />
+            <span className="eyebrow" style={{ color: colorOf(pack, dragon.speciesId) }}>{pack.species[dragon.speciesId]?.name}</span>
             <span className="num text-[11px] text-muted">
               T{dragon.tier} L{dragon.level}
             </span>
