@@ -1,4 +1,4 @@
-import { defaultContentPack, SCHEMA_VERSION } from "./content";
+import { defaultContentPack, SCHEMA_VERSION, SHIPPED_VERSION } from "./content";
 import { rollIv } from "./engine";
 import { IV_MAX, IV_MIN } from "./types";
 import type { ContentPack, Dragon, SaveGame } from "./types";
@@ -9,15 +9,35 @@ export const SAVE_KEY = "dragonkeep.save.v1";
 // Local storage today; swap these four functions for database calls when you
 // add accounts and nothing else in the game has to change.
 
+/**
+ * A player's browser holds whatever pack it last saw, including any Admin edits
+ * they made themselves. That copy is kept — unless the repo has shipped a newer
+ * version, in which case the shipped one wins and replaces it.
+ *
+ * So: raise `version` in pack.json and everyone picks the change up on their
+ * next visit. Leave it alone and local edits are left alone too.
+ */
 export function loadPack(): ContentPack {
   if (typeof window === "undefined") return defaultContentPack();
   try {
     const raw = window.localStorage.getItem(PACK_KEY);
     if (!raw) return defaultContentPack();
-    return migratePack(JSON.parse(raw) as ContentPack);
+
+    const stored = migratePack(JSON.parse(raw) as ContentPack);
+    if ((stored.version ?? 0) < SHIPPED_VERSION) {
+      const fresh = defaultContentPack();
+      savePack(fresh);
+      return fresh;
+    }
+    return stored;
   } catch {
     return defaultContentPack();
   }
+}
+
+/** True when the browser is running content the repo has since replaced. */
+export function packIsStale(pack: ContentPack): boolean {
+  return (pack.version ?? 0) < SHIPPED_VERSION;
 }
 
 export function savePack(pack: ContentPack) {
@@ -97,6 +117,7 @@ function migratePack(pack: ContentPack): ContentPack {
     ...base,
     ...pack,
     schemaVersion: SCHEMA_VERSION,
+    version: pack.version ?? 1,
     iv: { ...base.iv, ...(pack.iv ?? {}) },
     balance: { ...base.balance, ...pack.balance },
     custom: { ...base.custom, ...(pack.custom ?? {}) },

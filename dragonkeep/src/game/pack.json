@@ -1,0 +1,639 @@
+{
+  "schemaVersion": 3,
+  "version": 12,
+  "name": "Elemental placeholder set",
+  "taxa": {
+    "dragon": {
+      "id": "dragon",
+      "name": "Dragon",
+      "parentId": null,
+      "rank": "Domain",
+      "description": "Everything hangs off this.",
+      "custom": {}
+    },
+    "elemental": {
+      "id": "elemental",
+      "name": "Elemental",
+      "parentId": "dragon",
+      "rank": "Class",
+      "description": "Dragons bound to one of the four elements.",
+      "custom": {}
+    },
+    "fire": {
+      "id": "fire",
+      "name": "Fire",
+      "parentId": "elemental",
+      "rank": "Element",
+      "description": "",
+      "custom": {}
+    },
+    "earth": {
+      "id": "earth",
+      "name": "Earth",
+      "parentId": "elemental",
+      "rank": "Element",
+      "description": "",
+      "custom": {}
+    },
+    "water": {
+      "id": "water",
+      "name": "Water",
+      "parentId": "elemental",
+      "rank": "Element",
+      "description": "",
+      "custom": {}
+    },
+    "air": {
+      "id": "air",
+      "name": "Air",
+      "parentId": "elemental",
+      "rank": "Element",
+      "description": "",
+      "custom": {}
+    },
+    "hybrid": {
+      "id": "hybrid",
+      "name": "Hybrid",
+      "parentId": "dragon",
+      "rank": "Class",
+      "description": "Dragons born where two elements meet.",
+      "custom": {}
+    },
+    "transcendent": {
+      "id": "transcendent",
+      "name": "Transcendent",
+      "parentId": "dragon",
+      "rank": "Class",
+      "description": "Dragons that are no longer of any element at all.",
+      "custom": {}
+    }
+  },
+  "species": {
+    "fire-dragon": {
+      "id": "fire-dragon",
+      "name": "Fire Dragon",
+      "taxonId": "fire",
+      "color": "#D9633F",
+      "tags": [
+        "example-tag"
+      ],
+      "baseProduction": 180,
+      "incubationSeconds": 300,
+      "obtainable": true,
+      "marketPrice": 2250,
+      "description": "Placeholder. Replace this dragon in Admin.",
+      "custom": {}
+    },
+    "earth-dragon": {
+      "id": "earth-dragon",
+      "name": "Earth Dragon",
+      "taxonId": "earth",
+      "color": "#7E9B62",
+      "tags": [],
+      "baseProduction": 216,
+      "coinStorageHours": 0.4,
+      "incubationSeconds": 600,
+      "obtainable": true,
+      "marketPrice": 4500,
+      "description": "Placeholder. Replace this dragon in Admin.",
+      "custom": {}
+    },
+    "water-dragon": {
+      "id": "water-dragon",
+      "name": "Water Dragon",
+      "taxonId": "water",
+      "color": "#4E86C7",
+      "tags": [],
+      "baseProduction": 252,
+      "coinStorageHours": 0.5,
+      "incubationSeconds": 900,
+      "obtainable": true,
+      "marketPrice": 8100,
+      "description": "Placeholder. Replace this dragon in Admin.",
+      "custom": {}
+    },
+    "air-dragon": {
+      "id": "air-dragon",
+      "name": "Air Dragon",
+      "taxonId": "air",
+      "color": "#9FB6C9",
+      "tags": [
+        "example-tag"
+      ],
+      "baseProduction": 583,
+      "xpMultiplier": 1.25,
+      "coinStorageHours": 0.75,
+      "incubationSeconds": 2400,
+      "obtainable": true,
+      "description": "Placeholder. Replace this dragon in Admin. Not sold \u2014 bred only.",
+      "custom": {}
+    },
+    "elemental-dragon": {
+      "id": "elemental-dragon",
+      "name": "Elemental Dragon",
+      "taxonId": "elemental",
+      "color": "#B98CD6",
+      "baseProduction": 900,
+      "incubationSeconds": 4500,
+      "coinStorageHours": 0.75,
+      "xpMultiplier": 1.6,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Born of two different elements at once, belonging to none.",
+      "custom": {}
+    },
+    "lava-dragon": {
+      "id": "lava-dragon",
+      "name": "Lava Dragon",
+      "taxonId": "hybrid",
+      "color": "#E0552B",
+      "baseProduction": 700,
+      "incubationSeconds": 3000,
+      "coinStorageHours": 0.6,
+      "xpMultiplier": 1.4,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Stone that never finished cooling.",
+      "custom": {}
+    },
+    "plant-dragon": {
+      "id": "plant-dragon",
+      "name": "Plant Dragon",
+      "taxonId": "hybrid",
+      "color": "#6FAE55",
+      "baseProduction": 500,
+      "incubationSeconds": 1800,
+      "coinStorageHours": 0.6,
+      "xpMultiplier": 1.3,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Roots where it rests, and resents being moved.",
+      "custom": {}
+    },
+    "inferno-dragon": {
+      "id": "inferno-dragon",
+      "name": "Inferno Dragon",
+      "taxonId": "hybrid",
+      "color": "#C2361F",
+      "baseProduction": 1600,
+      "incubationSeconds": 8100,
+      "coinStorageHours": 0.8,
+      "xpMultiplier": 1.8,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Fire that has found something to burn.",
+      "custom": {}
+    },
+    "life-dragon": {
+      "id": "life-dragon",
+      "name": "Life Dragon",
+      "taxonId": "transcendent",
+      "color": "#59C9A5",
+      "baseProduction": 2500,
+      "incubationSeconds": 10800,
+      "coinStorageHours": 1.0,
+      "xpMultiplier": 2.2,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Two growing things, and something more than either.",
+      "custom": {}
+    },
+    "perfection-dragon": {
+      "id": "perfection-dragon",
+      "name": "Perfection Dragon",
+      "taxonId": "transcendent",
+      "color": "#EFE7C8",
+      "baseProduction": 5000,
+      "incubationSeconds": 86400,
+      "coinStorageHours": 1.25,
+      "xpMultiplier": 2.6,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Both parents were flawless. This one had to be.",
+      "custom": {}
+    },
+    "corruption-dragon": {
+      "id": "corruption-dragon",
+      "name": "Corruption Dragon",
+      "taxonId": "transcendent",
+      "color": "#6B4E8C",
+      "baseProduction": 1200,
+      "incubationSeconds": 21600,
+      "coinStorageHours": 0.8,
+      "xpMultiplier": 1.8,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Neither parent had anything to pass on, and something filled the gap.",
+      "custom": {}
+    },
+    "metal-dragon": {
+      "id": "metal-dragon",
+      "name": "Metal Dragon",
+      "taxonId": "hybrid",
+      "color": "#A8B0BA",
+      "baseProduction": 1400,
+      "incubationSeconds": 6300,
+      "coinStorageHours": 0.7,
+      "xpMultiplier": 1.7,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Earth put under something that had no business being in it.",
+      "custom": {}
+    },
+    "monster-dragon": {
+      "id": "monster-dragon",
+      "name": "Monster Dragon",
+      "taxonId": "transcendent",
+      "color": "#7A3B52",
+      "baseProduction": 4000,
+      "incubationSeconds": 18000,
+      "coinStorageHours": 1.0,
+      "xpMultiplier": 2.4,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. Something that grows, crossed with something that should not.",
+      "custom": {}
+    },
+    "ether-dragon": {
+      "id": "ether-dragon",
+      "name": "Ether Dragon",
+      "taxonId": "transcendent",
+      "color": "#C9BFE8",
+      "baseProduction": 7500,
+      "incubationSeconds": 64800,
+      "coinStorageHours": 1.4,
+      "xpMultiplier": 2.8,
+      "obtainable": true,
+      "tags": [],
+      "description": "Placeholder. What is left when an element is refined past having one.",
+      "custom": {}
+    }
+  },
+  "iv": {
+    "name": "Individual Value",
+    "description": "Rolled 0-31 when the dragon hatches. Fixed for life, never inherited.",
+    "curveExponent": 3,
+    "disadvantage": true,
+    "productionMagnitude": 0.6,
+    "growthMagnitude": 0
+  },
+  "breedingRules": [
+    {
+      "id": "rule-example-species",
+      "label": "Fire and Water",
+      "a": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "water-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "air-dragon",
+          "weight": 30
+        }
+      ],
+      "enabled": true,
+      "notes": "Two exact dragons. The parents stay in the pool, so this is a strong chance, not a certainty."
+    },
+    {
+      "id": "rule-elemental-cross",
+      "label": "Crossed elements",
+      "a": {
+        "kind": "taxon",
+        "taxonId": "elemental",
+        "includeDescendants": true
+      },
+      "b": {
+        "kind": "taxon",
+        "taxonId": "elemental",
+        "includeDescendants": true
+      },
+      "outcomes": [
+        {
+          "speciesId": "elemental-dragon",
+          "weight": 3
+        }
+      ],
+      "conditions": {
+        "differentSpecies": true
+      },
+      "enabled": true,
+      "notes": "Any two distinct members of the Elemental family. A slim chance, since it rides on a pool where each parent sits at 50."
+    },
+    {
+      "id": "rule-lava",
+      "label": "Earth and Fire",
+      "a": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "lava-dragon",
+          "weight": 4
+        }
+      ],
+      "enabled": true,
+      "notes": "Deliberately slim \u2014 the parents sit at 50 each, so this lands near 4%."
+    },
+    {
+      "id": "rule-plant",
+      "label": "Earth and Water",
+      "a": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "water-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "plant-dragon",
+          "weight": 30
+        }
+      ],
+      "enabled": true,
+      "notes": "A dependable combo, on a par with Fire and Water making Air."
+    },
+    {
+      "id": "rule-life",
+      "label": "Two Plants",
+      "a": {
+        "kind": "species",
+        "speciesId": "plant-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "plant-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "life-dragon",
+          "weight": 12
+        }
+      ],
+      "enabled": true,
+      "notes": "Both parents are the same, so the pool collapses to Plant at 100 plus this."
+    },
+    {
+      "id": "rule-inferno",
+      "label": "Fire and Plant",
+      "a": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "plant-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "inferno-dragon",
+          "weight": 20
+        }
+      ],
+      "enabled": true,
+      "notes": "The ordinary route to an Inferno."
+    },
+    {
+      "id": "rule-inferno-self",
+      "label": "Two Fires",
+      "a": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "inferno-dragon",
+          "weight": 1
+        }
+      ],
+      "enabled": true,
+      "notes": "A far longer shot than Fire and Plant \u2014 roughly one breed in a hundred."
+    },
+    {
+      "id": "rule-perfection",
+      "label": "Two flawless parents",
+      "a": {
+        "kind": "any"
+      },
+      "b": {
+        "kind": "any"
+      },
+      "outcomes": [
+        {
+          "speciesId": "perfection-dragon",
+          "weight": 100
+        }
+      ],
+      "enabled": true,
+      "notes": "Both parents at a perfect 31. Reaching that at all is the hard part, so the odds here are generous.",
+      "conditions": {
+        "minIv": 31
+      }
+    },
+    {
+      "id": "rule-corruption",
+      "label": "Two hollow parents",
+      "a": {
+        "kind": "any"
+      },
+      "b": {
+        "kind": "any"
+      },
+      "outcomes": [
+        {
+          "speciesId": "corruption-dragon",
+          "weight": 25
+        }
+      ],
+      "conditions": {
+        "maxIv": 0
+      },
+      "enabled": true,
+      "notes": "Both parents at a flat 0. Far easier to arrange than Perfection, so the weight is much lower."
+    },
+    {
+      "id": "rule-metal",
+      "label": "Elemental and Earth",
+      "a": {
+        "kind": "species",
+        "speciesId": "elemental-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "metal-dragon",
+          "weight": 25
+        }
+      ],
+      "enabled": true,
+      "notes": "Needs an Elemental Dragon first, so it sits a step behind the four base elements."
+    },
+    {
+      "id": "rule-monster",
+      "label": "Corruption and Life",
+      "a": {
+        "kind": "species",
+        "speciesId": "corruption-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "life-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "monster-dragon",
+          "weight": 25
+        }
+      ],
+      "enabled": true,
+      "notes": "Both parents are Transcendent, so this sits at the deep end of the tree."
+    },
+    {
+      "id": "rule-perfection-half",
+      "label": "One flawless parent",
+      "a": {
+        "kind": "any"
+      },
+      "b": {
+        "kind": "any"
+      },
+      "outcomes": [
+        {
+          "speciesId": "perfection-dragon",
+          "weight": 2
+        }
+      ],
+      "conditions": {
+        "minIvEither": 31
+      },
+      "enabled": true,
+      "notes": "A long shot on a single perfect parent \u2014 around 2%, against 43% for two."
+    },
+    {
+      "id": "rule-corruption-half",
+      "label": "One hollow parent",
+      "a": {
+        "kind": "any"
+      },
+      "b": {
+        "kind": "any"
+      },
+      "outcomes": [
+        {
+          "speciesId": "corruption-dragon",
+          "weight": 2
+        }
+      ],
+      "conditions": {
+        "maxIvEither": 0
+      },
+      "enabled": true,
+      "notes": "A long shot on a single hollow parent \u2014 around 2%, against 16% for two."
+    },
+    {
+      "id": "rule-ether",
+      "label": "Elemental and Perfection",
+      "a": {
+        "kind": "species",
+        "speciesId": "elemental-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "perfection-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "ether-dragon",
+          "weight": 25
+        }
+      ],
+      "enabled": true,
+      "notes": "Needs a Perfection Dragon, so it sits at the very back of the tree."
+    }
+  ],
+  "balance": {
+    "startingCoins": 5400,
+    "startingFood": 60,
+    "startingSpecies": [
+      "fire-dragon",
+      "earth-dragon"
+    ],
+    "roostCapacity": 6,
+    "roostSlotCost": 7200,
+    "roostSlotCostExponent": 2,
+    "power": {
+      "tierWeight": 12
+    },
+    "production": {
+      "exponent": 0.139
+    },
+    "capacity": {
+      "exponent": 0.3
+    },
+    "coinStorageHours": 0.3333333333333333,
+    "mergeCosts": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "maxTier": 5,
+    "levelXpBase": 50,
+    "levelXpExponent": 1.45,
+    "maxLevel": 40,
+    "parentWeight": 50,
+    "defaultIncubationSeconds": 60,
+    "maxBakeries": 3,
+    "bakeryCost": 3150,
+    "bakeryCostGrowth": 3,
+    "foodBatches": [
+      {
+        "id": "batch-1",
+        "name": "Scraps",
+        "coinCost": 0,
+        "seconds": 120,
+        "food": 12
+      },
+      {
+        "id": "batch-2",
+        "name": "Small Order",
+        "coinCost": 1350,
+        "seconds": 600,
+        "food": 80
+      },
+      {
+        "id": "batch-3",
+        "name": "Standing Order",
+        "coinCost": 8100,
+        "seconds": 3600,
+        "food": 600
+      },
+      {
+        "id": "batch-4",
+        "name": "Banquet",
+        "coinCost": 45000,
+        "seconds": 21600,
+        "food": 4500
+      }
+    ],
+    "xpPerFood": 2.5
+  },
+  "custom": {}
+}

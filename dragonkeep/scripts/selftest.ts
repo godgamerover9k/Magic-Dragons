@@ -1,9 +1,10 @@
 import assert from "node:assert";
-import { buildPool, chanceOf, rollPool } from "../src/game/breeding";
+import { buildPool, chanceOf, probeDragon, rollPool } from "../src/game/breeding";
 import { defaultContentPack } from "../src/game/content";
 import {
   coinCap,
   coinsPerHour,
+  foodToNextLevel,
   hoursToFill,
   nextBakeryCost,
   nextRoostSlotCost,
@@ -24,6 +25,7 @@ import {
   collectBatch,
   createDragon,
   feed,
+  feedToNextLevel,
   merge,
   newGame,
   rollIv,
@@ -107,9 +109,10 @@ check("a destination inside the doomed branch is refused", () => {
 });
 
 check("rules pointing at a deleted branch are redirected", () => {
-  const { pack: after } = removeTaxon(pack, "water", "dragon");
-  const rule = after.breedingRules.find((r) => r.id === "rule-example-taxon")!;
-  assert.strictEqual(rule.b.kind, "taxon");
+  const { pack: after } = removeTaxon(pack, "elemental", "dragon");
+  const rule = after.breedingRules.find((r) => r.id === "rule-elemental-cross")!;
+  assert.strictEqual(rule.a.kind, "taxon");
+  assert.strictEqual((rule.a as { taxonId: string }).taxonId, "dragon");
   assert.strictEqual((rule.b as { taxonId: string }).taxonId, "dragon");
 });
 
@@ -124,42 +127,104 @@ const two = make("earth-dragon");
 const three = make("air-dragon");
 
 check("parents are always in the pool", () => {
-  const pool = buildPool(pack, one, two, []);
+  const pool = buildPool(pack, one, two);
   assert.ok(pool.entries.some((e) => e.speciesId === "fire-dragon"));
   assert.ok(pool.entries.some((e) => e.speciesId === "earth-dragon"));
 });
 
 check("a named pair rule fires", () => {
-  const pool = buildPool(pack, one, two, []);
+  const pool = buildPool(pack, one, make("water-dragon"));
   assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-species"));
 });
 
-check("a branch rule fires for parents under the named elements", () => {
-  const four = make("water-dragon");
-  const pool = buildPool(pack, one, four, []);
-  assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-taxon"));
-  // Earth is not one of the two elements the rule names.
-  assert.ok(
-    !buildPool(pack, two, four, []).appliedRules.some(
-      (r) => r.id === "rule-example-taxon",
+check("air comes from fire and water", () => {
+  const fire = make("fire-dragon");
+  const water = make("water-dragon");
+  assert.ok(chanceOf(buildPool(pack, fire, water), "air-dragon") > 0);
+  // Not from any other pairing.
+  assert.strictEqual(chanceOf(buildPool(pack, fire, make("earth-dragon")), "air-dragon"), 0);
+  assert.strictEqual(chanceOf(buildPool(pack, fire, fire), "air-dragon"), 0);
+});
+
+check("the elemental dragon needs two distinct elements", () => {
+  const combos: [string, string][] = [
+    ["fire-dragon", "water-dragon"],
+    ["fire-dragon", "earth-dragon"],
+    ["earth-dragon", "water-dragon"],
+  ];
+  for (const [a, b] of combos) {
+    assert.ok(
+      chanceOf(buildPool(pack, make(a), make(b)), "elemental-dragon") > 0,
+      `${a} x ${b} should be able to produce one`,
+    );
+  }
+  // Two of the same kind must not.
+  for (const id of ["fire-dragon", "earth-dragon", "water-dragon"]) {
+    assert.strictEqual(
+      chanceOf(buildPool(pack, make(id), make(id)), "elemental-dragon"),
+      0,
+      `${id} paired with itself should not`,
+    );
+  }
+});
+
+check("the elemental dragon stays rare", () => {
+  const pool = buildPool(pack, make("fire-dragon"), make("earth-dragon"));
+  const odds = chanceOf(pool, "elemental-dragon");
+  assert.ok(odds > 0 && odds < 0.05, `odds were ${odds}`);
+});
+
+check("distinctness is enforced by the condition, not the matcher", () => {
+  const rule = pack.breedingRules.find((r) => r.id === "rule-elemental-cross")!;
+  assert.strictEqual(rule.conditions?.differentSpecies, true);
+  const relaxed = {
+    ...pack,
+    breedingRules: pack.breedingRules.map((r) =>
+      r.id === "rule-elemental-cross" ? { ...r, conditions: undefined } : r,
     ),
-  );
+  };
+  const fire = make("fire-dragon");
+  assert.ok(chanceOf(buildPool(relaxed, fire, fire), "elemental-dragon") > 0);
 });
 
 check("a tag rule crosses branches", () => {
-  const pool = buildPool(pack, one, three, []);
-  assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-tag"));
-  assert.ok(!pool.appliedRules.some((r) => r.id === "rule-example-taxon"));
+  // Built here rather than shipped, so the engine stays covered without the
+  // base set carrying an example combo nobody asked for.
+  const tagged = {
+    ...pack,
+    species: {
+      ...pack.species,
+      "fire-dragon": { ...pack.species["fire-dragon"], tags: ["scaled"] },
+      "life-dragon": { ...pack.species["life-dragon"], tags: ["scaled"] },
+    },
+    breedingRules: [
+      ...pack.breedingRules,
+      {
+        id: "rule-tag-probe",
+        label: "Tagged pair",
+        a: { kind: "tag" as const, tag: "scaled" },
+        b: { kind: "tag" as const, tag: "scaled" },
+        outcomes: [{ speciesId: "air-dragon", weight: 10 }],
+        priority: 0,
+        enabled: true,
+      },
+    ],
+  };
+  // Fire and Life sit in different branches entirely, so only the tag can match.
+  const across = buildPool(tagged, make("fire-dragon"), make("life-dragon"));
+  assert.ok(across.appliedRules.some((r) => r.id === "rule-tag-probe"));
+  const untagged = buildPool(tagged, make("water-dragon"), make("earth-dragon"));
+  assert.ok(!untagged.appliedRules.some((r) => r.id === "rule-tag-probe"));
 });
 
 check("rules match in either order", () => {
-  const fwd = buildPool(pack, one, two, []);
-  const rev = buildPool(pack, two, one, []);
+  const fwd = buildPool(pack, one, two);
+  const rev = buildPool(pack, two, one);
   assert.strictEqual(fwd.totalWeight, rev.totalWeight);
 });
 
 check("weights sum and probabilities total 1", () => {
-  const pool = buildPool(pack, one, two, []);
+  const pool = buildPool(pack, one, two);
   const sum = pool.entries.reduce((n, e) => n + e.weight, 0);
   assert.strictEqual(sum, pool.totalWeight);
   const p = pool.entries.reduce((n, e) => n + chanceOf(pool, e.speciesId), 0);
@@ -167,28 +232,52 @@ check("weights sum and probabilities total 1", () => {
 });
 
 check("tier conditions gate a rule", () => {
-  const four = make("water-dragon");
-  assert.strictEqual(chanceOf(buildPool(pack, three, four, []), "elder-dragon"), 0);
-  const pool = buildPool(pack, { ...three, tier: 2 }, { ...four, tier: 2 }, []);
-  assert.strictEqual(chanceOf(pool, "elder-dragon"), 1);
+  const one = make("earth-dragon");
+  const two = make("fire-dragon");
+  // The Stone-and-Sea style gate: nothing below tier 2 reaches an Elemental.
+  const gated = {
+    ...pack,
+    breedingRules: pack.breedingRules.map((r) =>
+      r.id === "rule-elemental-cross"
+        ? { ...r, conditions: { ...r.conditions, minTier: 2 } }
+        : r,
+    ),
+  };
+  assert.strictEqual(chanceOf(buildPool(gated, one, two), "elemental-dragon"), 0);
+  const raised = buildPool(gated, { ...one, tier: 2 }, { ...two, tier: 2 });
+  assert.ok(chanceOf(raised, "elemental-dragon") > 0);
 });
 
-check("exclusive rules replace the entire pool", () => {
-  const a = { ...three, tier: 2 };
-  const b = { ...make("water-dragon"), tier: 2 };
-  const pool = buildPool(pack, a, b, []);
-  assert.strictEqual(pool.entries.length, 1);
-  assert.strictEqual(rollPool(pool, 0.999), "elder-dragon");
-});
-
-check("exclusive stops firing once discovered", () => {
-  const a = { ...three, tier: 2 };
-  const b = { ...make("water-dragon"), tier: 2 };
-  assert.strictEqual(buildPool(pack, a, b, ["elder-dragon"]).exclusiveRule, null);
+check("no pairing can ever be a certainty", () => {
+  // Rules only add weight, so a parent is always somewhere in the pool.
+  const ids = Object.keys(pack.species);
+  for (const a of ids) {
+    for (const b of ids) {
+      for (const iv of [0, 15, 31]) {
+        const pool = buildPool(
+          pack,
+          { ...make(a), iv, tier: 3 },
+          { ...make(b), iv, tier: 3 },
+        );
+        // A parent always keeps a real share of the pool — the thinnest case in
+        // the base set is two flawless parents, where Perfection takes 43%. Two
+        // of the same kind can of course return that kind outright.
+        const parents = chanceOf(pool, a) + chanceOf(pool, b);
+        assert.ok(parents > 0.4, `${a} x ${b} at IV ${iv} left parents at ${parents}`);
+        for (const entry of pool.entries) {
+          if (entry.speciesId === a || entry.speciesId === b) continue;
+          assert.ok(
+            chanceOf(pool, entry.speciesId) < 1,
+            `${a} x ${b} at IV ${iv} guaranteed ${entry.speciesId}`,
+          );
+        }
+      }
+    }
+  }
 });
 
 check("roll boundaries land in the right bucket", () => {
-  const pool = buildPool(pack, one, two, []);
+  const pool = buildPool(pack, one, two);
   assert.strictEqual(rollPool(pool, 0), pool.entries[0].speciesId);
   assert.ok(rollPool(pool, 1) !== null);
   const counts = new Map<string, number>();
@@ -200,6 +289,195 @@ check("roll boundaries land in the right bucket", () => {
     const observed = (counts.get(entry.speciesId) ?? 0) / 20000;
     assert.ok(Math.abs(observed - chanceOf(pool, entry.speciesId)) < 0.01);
   }
+});
+
+console.log("\nCombos");
+const combo = (a: string, b: string, result: string, iv = 5) => {
+  const pool = buildPool(pack, { ...make(a), iv },
+    { ...make(b), iv },
+  );
+  return chanceOf(pool, result);
+};
+
+check("earth and fire make lava, and rarely", () => {
+  const odds = combo("earth-dragon", "fire-dragon", "lava-dragon");
+  assert.ok(odds > 0 && odds < 0.08, `odds were ${odds}`);
+  assert.strictEqual(combo("earth-dragon", "water-dragon", "lava-dragon"), 0);
+});
+
+check("earth and water make plant", () => {
+  assert.ok(combo("earth-dragon", "water-dragon", "plant-dragon") > 0.1);
+  assert.strictEqual(combo("fire-dragon", "water-dragon", "plant-dragon"), 0);
+});
+
+check("two plants make life", () => {
+  assert.ok(combo("plant-dragon", "plant-dragon", "life-dragon") > 0);
+  assert.strictEqual(combo("plant-dragon", "fire-dragon", "life-dragon"), 0);
+  assert.strictEqual(combo("water-dragon", "water-dragon", "life-dragon"), 0);
+});
+
+check("fire and plant make inferno far more often than fire alone", () => {
+  const paired = combo("fire-dragon", "plant-dragon", "inferno-dragon");
+  const alone = combo("fire-dragon", "fire-dragon", "inferno-dragon");
+  assert.ok(paired > 0.1, `paired odds were ${paired}`);
+  assert.ok(alone > 0 && alone < 0.02, `self odds were ${alone}`);
+  assert.ok(paired > alone * 10);
+});
+
+check("perfection needs two flawless parents", () => {
+  assert.ok(combo("fire-dragon", "water-dragon", "perfection-dragon", 31) > 0);
+  // One point short on both and it cannot happen at all.
+  assert.strictEqual(combo("fire-dragon", "water-dragon", "perfection-dragon", 30), 0);
+  // One flawless parent still leaves the long-shot rule, but far below the pair.
+  const oneFlawless = buildPool(
+    pack,
+    { ...make("fire-dragon"), iv: 31 },
+    { ...make("water-dragon"), iv: 30 },
+  );
+  const half = chanceOf(oneFlawless, "perfection-dragon");
+  assert.ok(half > 0 && half < 0.05, `half odds were ${half}`);
+});
+
+check("elemental and perfection make ether", () => {
+  assert.ok(combo("elemental-dragon", "perfection-dragon", "ether-dragon") > 0.1);
+  assert.strictEqual(combo("elemental-dragon", "elemental-dragon", "ether-dragon"), 0);
+  assert.strictEqual(combo("perfection-dragon", "perfection-dragon", "ether-dragon"), 0);
+  assert.strictEqual(combo("elemental-dragon", "monster-dragon", "ether-dragon"), 0);
+});
+
+check("ether sits behind perfection", () => {
+  // No rule reaches it without a Perfection parent. Ether itself is skipped —
+  // pairing it with anything leaves it in the pool as a parent, not a result.
+  for (const id of Object.keys(pack.species)) {
+    if (id === "perfection-dragon" || id === "ether-dragon") continue;
+    assert.strictEqual(
+      combo("elemental-dragon", id, "ether-dragon"),
+      0,
+      `elemental x ${id}`,
+    );
+  }
+});
+
+check("corruption and life make monster", () => {
+  assert.ok(combo("corruption-dragon", "life-dragon", "monster-dragon") > 0.1);
+  assert.strictEqual(combo("corruption-dragon", "corruption-dragon", "monster-dragon"), 0);
+  assert.strictEqual(combo("life-dragon", "life-dragon", "monster-dragon"), 0);
+  assert.strictEqual(combo("perfection-dragon", "life-dragon", "monster-dragon"), 0);
+});
+
+check("elemental and earth make metal", () => {
+  assert.ok(combo("elemental-dragon", "earth-dragon", "metal-dragon") > 0.1);
+  // Neither parent alone, nor the other elements, reach it.
+  assert.strictEqual(combo("earth-dragon", "earth-dragon", "metal-dragon"), 0);
+  assert.strictEqual(combo("elemental-dragon", "fire-dragon", "metal-dragon"), 0);
+  assert.strictEqual(combo("elemental-dragon", "water-dragon", "metal-dragon"), 0);
+});
+
+check("metal sits behind the elemental dragon", () => {
+  // Nothing purely elemental can produce it, so it is gated on that step.
+  const elements = ["fire-dragon", "earth-dragon", "water-dragon", "air-dragon"];
+  for (const a of elements)
+    for (const b of elements)
+      assert.strictEqual(combo(a, b, "metal-dragon"), 0, `${a} x ${b}`);
+});
+
+check("two hollow parents make corruption", () => {
+  assert.ok(combo("fire-dragon", "water-dragon", "corruption-dragon", 0) > 0);
+  // One point on either parent and the rule stops firing.
+  assert.strictEqual(combo("fire-dragon", "water-dragon", "corruption-dragon", 1), 0);
+  // One hollow parent keeps only the long-shot rule.
+  const oneHollow = buildPool(
+    pack,
+    { ...make("fire-dragon"), iv: 0 },
+    { ...make("water-dragon"), iv: 1 },
+  );
+  const half = chanceOf(oneHollow, "corruption-dragon");
+  assert.ok(half > 0 && half < 0.05, `half odds were ${half}`);
+});
+
+check("corruption and perfection cannot both fire", () => {
+  assert.strictEqual(combo("fire-dragon", "water-dragon", "perfection-dragon", 0), 0);
+  assert.strictEqual(combo("fire-dragon", "water-dragon", "corruption-dragon", 31), 0);
+});
+
+check("corruption is the likelier of the two to see", () => {
+  // Not because its weight is higher — it is lower — but because a 0 is
+  // ordinary and a 31 is not. This asserts the weights, not the roll odds.
+  const corruption = combo("fire-dragon", "water-dragon", "corruption-dragon", 0);
+  const perfection = combo("fire-dragon", "water-dragon", "perfection-dragon", 31);
+  assert.ok(corruption < perfection, `${corruption} should sit below ${perfection}`);
+});
+
+check("one flawless parent gives a slim chance", () => {
+  const pool = buildPool(
+    pack,
+    { ...make("fire-dragon"), iv: 31 },
+    { ...make("water-dragon"), iv: 15 },
+  );
+  const half = chanceOf(pool, "perfection-dragon");
+  const both = combo("fire-dragon", "water-dragon", "perfection-dragon", 31);
+  assert.ok(half > 0 && half < 0.05, `half odds were ${half}`);
+  assert.ok(both > half * 10, "two flawless parents should dwarf one");
+});
+
+check("one hollow parent gives a slim chance", () => {
+  const pool = buildPool(
+    pack,
+    { ...make("fire-dragon"), iv: 0 },
+    { ...make("water-dragon"), iv: 15 },
+  );
+  const half = chanceOf(pool, "corruption-dragon");
+  const both = combo("fire-dragon", "water-dragon", "corruption-dragon", 0);
+  assert.ok(half > 0 && half < 0.05, `half odds were ${half}`);
+  assert.ok(both > half * 5, "two hollow parents should dwarf one");
+});
+
+check("neither extreme means neither dragon", () => {
+  const pool = buildPool(
+    pack,
+    { ...make("fire-dragon"), iv: 15 },
+    { ...make("water-dragon"), iv: 20 },
+  );
+  assert.strictEqual(chanceOf(pool, "perfection-dragon"), 0);
+  assert.strictEqual(chanceOf(pool, "corruption-dragon"), 0);
+});
+
+check("perfection is open to any pairing, not just elements", () => {
+  assert.ok(combo("plant-dragon", "plant-dragon", "perfection-dragon", 31) > 0);
+});
+
+check("the odds calculator matches a real breed", () => {
+  // probeDragon is what Admin uses; it must build the same pool as an owned pair.
+  const owned = buildPool(pack, make("fire-dragon"), make("water-dragon"));
+  const probed = buildPool(pack, probeDragon("fire-dragon", { tier: 1, level: 1, iv: 0 }),
+    probeDragon("water-dragon", { tier: 1, level: 1, iv: 0 }),
+  );
+  assert.strictEqual(probed.totalWeight, owned.totalWeight);
+  assert.deepStrictEqual(
+    probed.entries.map((e) => [e.speciesId, e.weight]),
+    owned.entries.map((e) => [e.speciesId, e.weight]),
+  );
+});
+
+check("the calculator can see condition-gated rules", () => {
+  const gated = {
+    ...pack,
+    breedingRules: pack.breedingRules.map((r) =>
+      r.id === "rule-plant" ? { ...r, conditions: { minTier: 2 } } : r,
+    ),
+  };
+  const low = buildPool(
+    gated,
+    probeDragon("earth-dragon", { tier: 1 }),
+    probeDragon("water-dragon", { tier: 1 }),
+  );
+  assert.strictEqual(chanceOf(low, "plant-dragon"), 0);
+  const high = buildPool(
+    gated,
+    probeDragon("earth-dragon", { tier: 2 }),
+    probeDragon("water-dragon", { tier: 2 }),
+  );
+  assert.ok(chanceOf(high, "plant-dragon") > 0);
 });
 
 console.log("\nEconomy");
@@ -245,7 +523,7 @@ check("better dragons hold longer before they stop", () => {
 
 check("xp curve rises, and a dragon can make its own steeper", () => {
   const common = make("fire-dragon");
-  const steeper = make("elder-dragon");
+  const steeper = make("monster-dragon");
   assert.ok(xpToNextLevel(pack, { ...common, level: 5 }) > xpToNextLevel(pack, common));
   assert.ok(xpToNextLevel(pack, steeper) > xpToNextLevel(pack, common));
 });
@@ -356,7 +634,7 @@ check("power has diminishing returns", () => {
 
 check("a fully raised weak dragon cannot out-earn a fresh strong one", () => {
   const maxedCommon = { ...make("fire-dragon", IV_MAX), level: pack.balance.maxLevel };
-  const freshLegendary = make("elder-dragon", IV_MIN);
+  const freshLegendary = make("monster-dragon", IV_MIN);
   assert.ok(
     coinsPerHour(pack, freshLegendary) > coinsPerHour(pack, maxedCommon),
     `raised ${coinsPerHour(pack, maxedCommon)} vs fresh ${coinsPerHour(pack, freshLegendary)}`,
@@ -533,9 +811,26 @@ check("older saves are repaired rather than dropped", () => {
 });
 
 console.log("\nIncubation");
+check("nothing outside the four long ones passes three hours", () => {
+  const long = [
+    "life-dragon",
+    "monster-dragon",
+    "corruption-dragon",
+    "perfection-dragon",
+    "ether-dragon",
+  ];
+  for (const s of Object.values(pack.species)) {
+    if (long.includes(s.id)) continue;
+    assert.ok(
+      incubationSeconds(pack, s.id) < 10800,
+      `${s.name} sits at ${incubationSeconds(pack, s.id)}s`,
+    );
+  }
+});
+
 check("each dragon can set its own incubation", () => {
-  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 60);
-  assert.strictEqual(incubationSeconds(pack, "elder-dragon"), 3600);
+  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 300);
+  assert.strictEqual(incubationSeconds(pack, "monster-dragon"), 18000);
   assert.ok(
     incubationSeconds(pack, "air-dragon") > incubationSeconds(pack, "water-dragon"),
   );
@@ -670,7 +965,7 @@ check("nothing is spent while admin mode is on", () => {
   const bought = buySpecies(pack, built.save, "fire-dragon", NOW);
   assert.ok(bought.ok, bought.message);
   assert.strictEqual(bought.save.coins, 0);
-  const fed = feed(pack, bought.save, bought.save.dragons[0].id, "food-4", 5);
+  const fed = feed(pack, bought.save, bought.save.dragons[0].id, 500);
   assert.ok(fed.ok, fed.message);
   assert.strictEqual(fed.save.food, 0);
 });
@@ -707,7 +1002,7 @@ check("a fresh save has starters and discoveries", () => {
 
 check("feeding spends food and grants levels", () => {
   const save = newGame(pack, NOW);
-  const r = feed(pack, { ...save, food: 500 }, save.dragons[0].id, "food-1", 10);
+  const r = feed(pack, { ...save, food: 500 }, save.dragons[0].id, 50);
   assert.ok(r.ok, r.message);
   assert.strictEqual(r.save.food, 450);
   assert.ok(r.save.dragons[0].level > 1);
@@ -715,9 +1010,57 @@ check("feeding spends food and grants levels", () => {
 
 check("feeding without food is refused", () => {
   const save = { ...newGame(pack, NOW), food: 0 };
-  const r = feed(pack, save, save.dragons[0].id, "food-1", 1);
+  const r = feed(pack, save, save.dragons[0].id, 1);
   assert.ok(!r.ok);
   assert.match(r.message, /Not enough food/);
+});
+
+check("feeding to the next level lands exactly one level up", () => {
+  const save = { ...newGame(pack, NOW), food: 100000 };
+  const target = save.dragons[0];
+  const needed = foodToNextLevel(pack, target)!;
+  const r = feedToNextLevel(pack, save, target.id);
+  assert.ok(r.ok, r.message);
+  const after = r.save.dragons.find((d) => d.id === target.id)!;
+  assert.strictEqual(after.level, target.level + 1);
+  assert.strictEqual(save.food - r.save.food, needed);
+});
+
+check("short of a level, it feeds everything it can", () => {
+  const start = newGame(pack, NOW);
+  const target = start.dragons[0];
+  const needed = foodToNextLevel(pack, target)!;
+  const save = { ...start, food: needed - 1 };
+  const r = feedToNextLevel(pack, save, target.id);
+  assert.ok(r.ok, r.message);
+  assert.strictEqual(r.save.food, 0);
+  const after = r.save.dragons.find((d) => d.id === target.id)!;
+  assert.strictEqual(after.level, target.level);
+  assert.ok(after.xp > target.xp);
+  assert.match(r.message, /short of the next level/);
+});
+
+check("a maxed dragon cannot be fed", () => {
+  const start = newGame(pack, NOW);
+  const maxed = { ...start.dragons[0], level: pack.balance.maxLevel };
+  const save = { ...start, food: 1000, dragons: [maxed, start.dragons[1]] };
+  assert.strictEqual(foodToNextLevel(pack, maxed), null);
+  const r = feedToNextLevel(pack, save, maxed.id);
+  assert.ok(!r.ok);
+  assert.match(r.message, /max level/);
+});
+
+check("a high growth IV makes food go further", () => {
+  const tuned = { ...pack, iv: { ...pack.iv, growthMagnitude: 0.5 } };
+  const start = newGame(tuned, NOW);
+  const dull = { ...start.dragons[0], iv: 0 };
+  const sharp = { ...start.dragons[0], iv: 31 };
+  assert.ok(foodToNextLevel(tuned, sharp)! < foodToNextLevel(tuned, dull)!);
+});
+
+check("every bakery order yields a different amount of food", () => {
+  const amounts = pack.balance.foodBatches.map((b) => b.food);
+  assert.strictEqual(new Set(amounts).size, amounts.length);
 });
 
 check("breeding then hatching adds a dragon", () => {

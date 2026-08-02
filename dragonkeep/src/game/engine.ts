@@ -4,6 +4,7 @@ import {
   batchById,
   coinCap,
   eligibleFodder,
+  foodToNextLevel,
   grantXp,
   incubationSeconds,
   mergeCost,
@@ -162,34 +163,69 @@ export function collectAllCoins(
 
 // --- Feeding ---------------------------------------------------------------
 
+/**
+ * Food is a single pool. The player decides how much of it goes into which
+ * dragon; every unit is worth balance.xpPerFood, adjusted by the dragon's IV.
+ */
 export function feed(
   pack: ContentPack,
   save: SaveGame,
   dragonId: string,
-  foodTypeId: string,
-  portions = 1,
+  amount: number,
 ): ActionResult {
   const dragon = save.dragons.find((d) => d.id === dragonId);
   if (!dragon) return fail(save, "That dragon is not in your roost.");
-  const foodType = pack.balance.foodTypes.find((f) => f.id === foodTypeId);
-  if (!foodType) return fail(save, "Unknown food.");
   if (dragon.level >= pack.balance.maxLevel)
     return fail(save, `${nameOf(pack, dragon)} is already at max level.`);
 
-  const cost = foodType.foodCost * portions;
-  if (!canAfford(save, 0, cost))
-    return fail(save, `Not enough food — you need ${cost}, you have ${save.food}.`);
+  const portions = Math.floor(amount);
+  if (portions <= 0) return fail(save, "Feed at least one.");
+  if (!canAfford(save, 0, portions))
+    return fail(save, `Not enough food — you need ${portions}, you have ${save.food}.`);
 
-  const { dragon: fed, levelsGained } = grantXp(pack, dragon, foodType.xp * portions);
+  const { dragon: fed, levelsGained } = grantXp(
+    pack,
+    dragon,
+    portions * pack.balance.xpPerFood,
+  );
   return {
     save: {
-      ...spend(save, 0, cost),
+      ...spend(save, 0, portions),
       dragons: save.dragons.map((d) => (d.id === dragonId ? fed : d)),
     },
     ok: true,
     message: levelsGained
       ? `${nameOf(pack, fed)} reached level ${fed.level}.`
-      : `Fed ${nameOf(pack, fed)}.`,
+      : `Fed ${nameOf(pack, fed)} ${portions} food.`,
+  };
+}
+
+/**
+ * Feeds exactly enough to reach the next level. When there is not enough food
+ * for that, it feeds everything available rather than refusing outright.
+ */
+export function feedToNextLevel(
+  pack: ContentPack,
+  save: SaveGame,
+  dragonId: string,
+): ActionResult {
+  const dragon = save.dragons.find((d) => d.id === dragonId);
+  if (!dragon) return fail(save, "That dragon is not in your roost.");
+
+  const needed = foodToNextLevel(pack, dragon);
+  if (needed === null)
+    return fail(save, `${nameOf(pack, dragon)} is already at max level.`);
+
+  const available = save.adminMode ? needed : save.food;
+  if (available <= 0) return fail(save, "You have no food.");
+
+  const portions = Math.min(needed, available);
+  const result = feed(pack, save, dragonId, portions);
+  if (!result.ok || portions >= needed) return result;
+
+  return {
+    ...result,
+    message: `Fed all ${portions} food — ${needed - portions} short of the next level.`,
   };
 }
 
@@ -211,7 +247,7 @@ export function startBreeding(
   if (roostIsFull(save))
     return fail(save, "The roost is full — no room for a hatchling.");
 
-  const pool = buildPool(pack, a, b, save.discovered);
+  const pool = buildPool(pack, a, b);
   const resultSpeciesId = rollPool(pool, rng());
   if (!resultSpeciesId) return fail(save, "That pairing produced nothing.");
 

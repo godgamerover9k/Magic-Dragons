@@ -18,7 +18,7 @@ export function MarketTab({ game }: { game: Game }) {
 
   return (
     <div className="space-y-3">
-      <SectionHeading label={`Market · ${forSale.length} available`} />
+      <SectionHeading label="Market" />
 
       {full && (
         <p className="rounded border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">

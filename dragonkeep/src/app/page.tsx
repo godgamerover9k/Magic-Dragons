@@ -33,11 +33,13 @@ export default function Page() {
   const foodWaiting = readyFood(pack, save, now);
 
   return (
-    <main className="mx-auto min-h-dvh max-w-2xl pb-24">
+    <main className="mx-auto min-h-dvh max-w-2xl overflow-x-hidden pb-24">
       <header className="sticky top-0 z-20 border-b border-line bg-ink/95 backdrop-blur">
-        <div className="flex items-center gap-3 px-4 pt-3">
-          <h1 className="font-display text-lg leading-none tracking-tight">Dragonkeep</h1>
-          <p className="eyebrow truncate">{pack.name}</p>
+        <div className="flex items-baseline gap-2 px-4 pt-3">
+          <h1 className="shrink-0 font-display text-lg leading-none tracking-tight">
+            Dragonkeep
+          </h1>
+          <p className="eyebrow min-w-0 truncate">{pack.name}</p>
         </div>
 
         <div className="flex items-center gap-4 px-4 py-2.5">

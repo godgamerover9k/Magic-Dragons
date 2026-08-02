@@ -2,6 +2,13 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { defaultContentPack } from "@/game/content";
+import {
+  buildPool,
+  conditionsMet,
+  probeDragon,
+  ruleMatchesPair,
+} from "@/game/breeding";
+import { colorOf } from "@/game/economy";
 import { grantDragon, setAdminMode, skipIncubation } from "@/game/engine";
 import {
   flattenTree,
@@ -59,16 +66,41 @@ export function AdminTab({ game }: { game: Game }) {
       <IssueList issues={issues} />
 
       <Section title="Files" defaultOpen>
-        <Field label="Pack name">
-          <input
-            value={pack.name}
-            onChange={(e) => edit((p) => ({ ...p, name: e.target.value }))}
-          />
-        </Field>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Field label="Pack name">
+            <input
+              value={pack.name}
+              onChange={(e) => edit((p) => ({ ...p, name: e.target.value }))}
+            />
+          </Field>
+          <Field
+            label="Version"
+            hint="Raise this before shipping, or players keep the pack they already have."
+          >
+            <input
+              type="number"
+              value={pack.version ?? 1}
+              onChange={(e) =>
+                edit((p) => ({ ...p, version: Math.max(1, Number(e.target.value) || 1) }))
+              }
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3 rounded border border-line bg-raised p-2.5 text-[11px] leading-snug text-muted">
+          <p className="text-bone">To ship your changes to everyone</p>
+          <p className="mt-1">
+            1. Raise the version above. 2. Download the pack — it saves as{" "}
+            <span className="num">pack.json</span>. 3. On GitHub, replace{" "}
+            <span className="num">src/game/pack.json</span> with it and commit. Vercel
+            rebuilds on its own, and anyone on an older version is moved across on their
+            next visit.
+          </p>
+        </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Button
             variant="solid"
-            onClick={() => downloadJson(`${slug(pack.name)}-pack.json`, pack)}
+            onClick={() => downloadJson("pack.json", pack)}
           >
             Download content pack
           </Button>
@@ -128,6 +160,10 @@ export function AdminTab({ game }: { game: Game }) {
 
       <Section title={`Dragons · ${Object.keys(pack.species).length}`}>
         <SpeciesEditor pack={pack} edit={edit} />
+      </Section>
+
+      <Section title="Odds calculator">
+        <OddsCalculator pack={pack} />
       </Section>
 
       <Section title={`Breeding rules · ${pack.breedingRules.length}`}>
@@ -206,6 +242,166 @@ export function AdminTab({ game }: { game: Game }) {
           not hand you a balance.
         </p>
       </Section>
+    </div>
+  );
+}
+
+// --- Odds calculator -------------------------------------------------------
+
+function OddsCalculator({ pack }: { pack: ContentPack }) {
+  const ids = Object.keys(pack.species);
+  const [a, setA] = useState(ids[0] ?? "");
+  const [b, setB] = useState(ids[1] ?? ids[0] ?? "");
+  const [tier, setTier] = useState(1);
+  const [level, setLevel] = useState(1);
+  const [ivA, setIvA] = useState(0);
+  const [ivB, setIvB] = useState(0);
+
+  const parentA = probeDragon(a, { tier, level, iv: ivA });
+  const parentB = probeDragon(b, { tier, level, iv: ivB });
+
+  const pool =
+    pack.species[a] && pack.species[b]
+      ? buildPool(pack, parentA, parentB)
+      : null;
+
+  // Rules that fit the pair but were turned away, and the reason why. This is
+  // usually what you actually want to know when a combo is not appearing.
+  const blocked = pack.breedingRules
+    .filter((rule) => rule.enabled)
+    .filter((rule) => ruleMatchesPair(pack, rule, parentA, parentB))
+    .filter((rule) => !conditionsMet(rule, parentA, parentB))
+    .map((rule) => {
+      const c = rule.conditions ?? {};
+      const reasons: string[] = [];
+      if (c.minTier !== undefined && tier < c.minTier)
+        reasons.push(`needs tier ${c.minTier}`);
+      if (c.minLevel !== undefined && level < c.minLevel)
+        reasons.push(`needs level ${c.minLevel}`);
+      if (c.minIv !== undefined && (ivA < c.minIv || ivB < c.minIv))
+        reasons.push(`needs IV ${c.minIv}+`);
+      if (c.maxIv !== undefined && (ivA > c.maxIv || ivB > c.maxIv))
+        reasons.push(`needs IV ${c.maxIv} or under`);
+      if (c.differentSpecies && a === b) reasons.push("parents must differ");
+      if (c.minIvEither !== undefined && Math.max(ivA, ivB) < c.minIvEither)
+        reasons.push(`needs one parent at IV ${c.minIvEither}+`);
+      if (c.maxIvEither !== undefined && Math.min(ivA, ivB) > c.maxIvEither)
+        reasons.push(`needs one parent at IV ${c.maxIvEither} or under`);
+      return { rule, reasons };
+    });
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] leading-snug text-muted">
+        Works on hypothetical parents — you do not need to own either. Shows the pool
+        exactly as a real breed would build it.
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="First parent">
+          <select value={a} onChange={(e) => setA(e.target.value)}>
+            {Object.values(pack.species).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Second parent">
+          <select value={b} onChange={(e) => setB(e.target.value)}>
+            {Object.values(pack.species).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Field label="Tier (both)">
+          <input
+            type="number"
+            min={1}
+            value={tier}
+            onChange={(e) => setTier(Math.max(1, Number(e.target.value) || 1))}
+          />
+        </Field>
+        <Field label="Level (both)">
+          <input
+            type="number"
+            min={1}
+            value={level}
+            onChange={(e) => setLevel(Math.max(1, Number(e.target.value) || 1))}
+          />
+        </Field>
+        <Field label={`IV, first (0-${IV_MAX})`}>
+          <input
+            type="number"
+            min={0}
+            max={IV_MAX}
+            value={ivA}
+            onChange={(e) => setIvA(Number(e.target.value) || 0)}
+          />
+        </Field>
+        <Field label={`IV, second (0-${IV_MAX})`}>
+          <input
+            type="number"
+            min={0}
+            max={IV_MAX}
+            value={ivB}
+            onChange={(e) => setIvB(Number(e.target.value) || 0)}
+          />
+        </Field>
+      </div>
+
+
+      {pool && (
+        <div className="rounded border border-line p-2.5">
+          <p className="eyebrow mb-2">Total weight {pool.totalWeight}</p>
+          <table className="w-full text-xs">
+            <tbody>
+              {pool.entries.map((entry) => {
+                const pct = (entry.weight / pool.totalWeight) * 100;
+                return (
+                  <tr key={entry.speciesId} className="border-b border-line/60">
+                    <td className="py-1 pr-2">
+                      <span
+                        className="mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                        style={{ background: colorOf(pack, entry.speciesId) }}
+                      />
+                      {pack.species[entry.speciesId]?.name}
+                    </td>
+                    <td className="py-1 pr-2 text-[10px] text-muted">
+                      {entry.sources.join(", ")}
+                    </td>
+                    <td className="num py-1 text-right">{entry.weight}</td>
+                    <td className="num py-1 pl-2 text-right">
+                      {pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {blocked.length > 0 && (
+        <div className="rounded border border-line p-2.5">
+          <p className="eyebrow mb-1.5">Rules that fit but did not fire</p>
+          <ul className="space-y-1 text-[11px]">
+            {blocked.map(({ rule, reasons }) => (
+              <li key={rule.id} className="flex justify-between gap-2">
+                <span>{rule.label}</span>
+                <span className="shrink-0 text-warn">
+                  {reasons.join(", ") || "a condition was not met"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -383,10 +579,10 @@ function TaxonomyEditor({
           <Field label="Name">
             <input value={node.name} onChange={(e) => update({ name: e.target.value })} />
           </Field>
-          <Field label="Rank label" hint="Free text — Order, Clade, Bloodline, anything.">
+          <Field label="Rank label" hint="Your own note. Not shown to players.">
             <input value={node.rank ?? ""} onChange={(e) => update({ rank: e.target.value })} />
           </Field>
-          <Field label="Description">
+          <Field label="Description" hint="Your own note. Not shown to players.">
             <textarea
               rows={2}
               value={node.description ?? ""}
@@ -680,8 +876,6 @@ function RulesEditor({
       a: { kind: "any" },
       b: { kind: "any" },
       outcomes: [],
-      exclusive: false,
-      priority: 0,
       enabled: true,
     };
     edit((p) => ({ ...p, breedingRules: [...p.breedingRules, draft] }));
@@ -718,7 +912,6 @@ function RulesEditor({
             } ${r.enabled ? "" : "opacity-45"}`}
           >
             <span className="truncate">{r.label}</span>
-            {r.exclusive && <span className="eyebrow ml-auto shrink-0">guaranteed</span>}
           </button>
         ))}
       </div>
@@ -822,6 +1015,66 @@ function RulesEditor({
                 }
               />
             </Field>
+            <Field label="Both parents at least IV">
+              <input
+                type="number"
+                value={rule.conditions?.minIv ?? 0}
+                onChange={(e) =>
+                  update({
+                    conditions: {
+                      ...rule.conditions,
+                      minIv: Number(e.target.value) || undefined,
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="One parent at least IV">
+              <input
+                type="number"
+                value={rule.conditions?.minIvEither ?? 0}
+                onChange={(e) =>
+                  update({
+                    conditions: {
+                      ...rule.conditions,
+                      minIvEither: Number(e.target.value) || undefined,
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="One parent at most IV">
+              <input
+                type="number"
+                value={rule.conditions?.maxIvEither ?? ""}
+                placeholder="no limit"
+                onChange={(e) =>
+                  update({
+                    conditions: {
+                      ...rule.conditions,
+                      maxIvEither:
+                        e.target.value === "" ? undefined : Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Both parents at most IV">
+              <input
+                type="number"
+                value={rule.conditions?.maxIv ?? ""}
+                placeholder="no limit"
+                onChange={(e) =>
+                  update({
+                    conditions: {
+                      ...rule.conditions,
+                      maxIv:
+                        e.target.value === "" ? undefined : Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </Field>
             <Field label="Both parents at least level">
               <input
                 type="number"
@@ -842,10 +1095,17 @@ function RulesEditor({
             <input
               type="checkbox"
               className="w-auto"
-              checked={rule.exclusive}
-              onChange={(e) => update({ exclusive: e.target.checked })}
+              checked={rule.conditions?.differentSpecies ?? false}
+              onChange={(e) =>
+                update({
+                  conditions: {
+                    ...rule.conditions,
+                    differentSpecies: e.target.checked || undefined,
+                  },
+                })
+              }
             />
-            Guaranteed — this rule replaces the whole pool
+            Parents must be different dragons
           </label>
           <label className="flex items-center gap-2 text-xs">
             <input

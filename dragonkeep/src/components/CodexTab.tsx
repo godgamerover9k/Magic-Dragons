@@ -5,18 +5,34 @@ import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game
 import { childrenOf, roots, speciesInTaxon } from "@/game/taxonomy";
 import type { Species, Taxon } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Panel, SectionHeading } from "./ui";
+import { Button, Panel, SectionHeading } from "./ui";
 
-// The signature view: the taxonomy drawn as a cladogram, with undiscovered
-// branches held in silhouette. The tree is the collection.
+// The taxonomy drawn as a collapsible cladogram. Branches you have never had a
+// dragon from stay anonymous, so the tree fills in as the collection does.
 
 export function CodexTab({ game }: { game: Game }) {
   const { pack, save } = game;
   const [openSpecies, setOpenSpecies] = useState<string | null>(null);
+  // Top-level branches start open; everything below waits to be asked for.
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(roots(pack).map((t) => t.id)),
+  );
+
   if (!save) return null;
 
   const all = Object.values(pack.species);
   const found = all.filter((s) => save.discovered.includes(s.id)).length;
+
+  const toggle = (id: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const allIds = Object.keys(pack.taxa);
+  const everythingOpen = allIds.every((id) => open.has(id));
 
   return (
     <div className="space-y-3">
@@ -29,6 +45,15 @@ export function CodexTab({ game }: { game: Game }) {
         }
       />
 
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          onClick={() => setOpen(everythingOpen ? new Set() : new Set(allIds))}
+        >
+          {everythingOpen ? "Collapse all" : "Expand all"}
+        </Button>
+      </div>
+
       <Panel className="p-3">
         {roots(pack).map((taxon) => (
           <Branch
@@ -36,6 +61,8 @@ export function CodexTab({ game }: { game: Game }) {
             taxon={taxon}
             game={game}
             depth={0}
+            open={open}
+            toggle={toggle}
             openSpecies={openSpecies}
             setOpenSpecies={setOpenSpecies}
           />
@@ -43,8 +70,8 @@ export function CodexTab({ game }: { game: Game }) {
       </Panel>
 
       <p className="px-1 text-[11px] text-muted">
-        Every rank shown here can be targeted by a breeding rule. A rule aimed at a branch
-        applies to everything beneath it.
+        Every branch shown here can be targeted by a breeding rule, which then applies to
+        everything beneath it.
       </p>
     </div>
   );
@@ -54,12 +81,16 @@ function Branch({
   taxon,
   game,
   depth,
+  open,
+  toggle,
   openSpecies,
   setOpenSpecies,
 }: {
   taxon: Taxon;
   game: Game;
   depth: number;
+  open: Set<string>;
+  toggle: (id: string) => void;
   openSpecies: string | null;
   setOpenSpecies: (id: string | null) => void;
 }) {
@@ -69,53 +100,69 @@ function Branch({
   const beneath = speciesInTaxon(pack, taxon.id);
   const found = beneath.filter((s) => save?.discovered.includes(s.id)).length;
   const complete = beneath.length > 0 && found === beneath.length;
+  const known = found > 0;
+
+  const expanded = open.has(taxon.id);
+  const hasContents = kids.length > 0 || own.length > 0;
 
   return (
     <div className={depth > 0 ? "relative branch pl-4" : ""}>
-      <div className="py-1.5">
+      <button
+        type="button"
+        onClick={() => hasContents && toggle(taxon.id)}
+        aria-expanded={hasContents ? expanded : undefined}
+        disabled={!hasContents}
+        className="w-full py-1.5 text-left"
+      >
         <div className="flex items-baseline gap-2">
           <span
-            className="font-display text-sm"
+            className="w-3 shrink-0 text-[10px] text-muted"
+            aria-hidden="true"
+          >
+            {hasContents ? (expanded ? "▾" : "▸") : ""}
+          </span>
+          <span
+            className={`font-display text-sm ${known ? "" : "text-muted/50"}`}
             style={{ color: complete ? "var(--color-verdigris)" : undefined }}
           >
-            {taxon.name}
+            {known ? taxon.name : "———"}
           </span>
-          {taxon.rank && <span className="eyebrow">{taxon.rank}</span>}
           <span className="num ml-auto text-[11px] text-muted">
             {found}/{beneath.length}
           </span>
         </div>
-        {taxon.description && depth < 2 && (
-          <p className="mt-0.5 max-w-prose text-[11px] leading-snug text-muted">
-            {taxon.description}
-          </p>
-        )}
-      </div>
+      </button>
 
-      <div className="space-y-0.5">
-        {own.map((species) => (
-          <SpeciesRow
-            key={species.id}
-            species={species}
-            game={game}
-            open={openSpecies === species.id}
-            onToggle={() =>
-              setOpenSpecies(openSpecies === species.id ? null : species.id)
-            }
-          />
-        ))}
-      </div>
+      {expanded && (
+        <div className="pl-1">
+          <div className="space-y-0.5">
+            {own.map((species) => (
+              <SpeciesRow
+                key={species.id}
+                species={species}
+                game={game}
+                open={openSpecies === species.id}
+                onToggle={() =>
+                  setOpenSpecies(openSpecies === species.id ? null : species.id)
+                }
+              />
+            ))}
+          </div>
 
-      {kids.map((child) => (
-        <Branch
-          key={child.id}
-          taxon={child}
-          game={game}
-          depth={depth + 1}
-          openSpecies={openSpecies}
-          setOpenSpecies={setOpenSpecies}
-        />
-      ))}
+          {kids.map((child) => (
+            <Branch
+              key={child.id}
+              taxon={child}
+              game={game}
+              depth={depth + 1}
+              open={open}
+              toggle={toggle}
+              openSpecies={openSpecies}
+              setOpenSpecies={setOpenSpecies}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

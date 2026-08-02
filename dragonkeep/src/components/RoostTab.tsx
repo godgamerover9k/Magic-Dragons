@@ -5,21 +5,20 @@ import {
   coinCap,
   coinsPerHour,
   eligibleFodder,
+  foodToNextLevel,
   formatNumber,
-  formatDuration,
-  hoursToFill,
   mergeCost,
   powerOf,
   tierOneCost,
   pendingCoins,
   colorOf,
   speciesOf,
-  timeUntilFull,
   xpToNextLevel,
 } from "@/game/economy";
 import {
   buyRoostSlot,
   feed,
+  feedToNextLevel,
   merge,
   nameOf,
   releaseDragon,
@@ -30,7 +29,7 @@ import { taxonPath } from "@/game/taxonomy";
 import { IV_MAX } from "@/game/types";
 import type { ContentPack, Dragon } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Bar, Button, Empty, Panel, SectionHeading } from "./ui";
+import { Bar, Button, Empty, Panel, SectionHeading, StatStrip } from "./ui";
 
 export function RoostTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
@@ -51,7 +50,7 @@ export function RoostTab({ game }: { game: Game }) {
   return (
     <div className="space-y-3">
       <SectionHeading
-        label={`Roost · ${save.dragons.length}/${save.roostCapacity} perches · ${formatNumber(totalRate)} coins/hr`}
+        label="Roost"
         aside={
           <select
             value={sort}
@@ -65,6 +64,13 @@ export function RoostTab({ game }: { game: Game }) {
             <option value="name">Name</option>
           </select>
         }
+      />
+
+      <StatStrip
+        items={[
+          { label: "perches", value: `${save.dragons.length}/${save.roostCapacity}` },
+          { label: "coins/hr", value: formatNumber(totalRate) },
+        ]}
       />
 
       {sorted.map((dragon) => (
@@ -127,10 +133,9 @@ function DragonCard({
   const cap = coinCap(pack, dragon);
   const need = xpToNextLevel(pack, dragon);
   const atMax = dragon.level >= pack.balance.maxLevel;
-  const fillsIn = timeUntilFull(pack, dragon, now);
   const cost = mergeCost(pack, dragon);
   const fodder = eligibleFodder(save.dragons, dragon);
-  const affordableFood = pack.balance.foodTypes;
+  const needed = foodToNextLevel(pack, dragon);
 
   return (
     <Panel className="overflow-hidden">
@@ -141,7 +146,7 @@ function DragonCard({
         aria-expanded={open}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate font-display text-base leading-tight">
               {nameOf(pack, dragon)}
               {dragon.locked && <span className="ml-1.5 text-xs text-muted">locked</span>}
@@ -179,38 +184,44 @@ function DragonCard({
         <div className="space-y-3 border-t border-line p-3">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             <Stat label="Experience" value={atMax ? "max level" : `${formatNumber(dragon.xp)} / ${formatNumber(need)}`} />
-            <Stat
-              label="Storage"
-              value={
-                fillsIn === null
-                  ? "full — not earning"
-                  : `full in ${formatDuration(fillsIn)}`
-              }
-            />
             <Stat label="Power" value={formatNumber(powerOf(pack, dragon))} />
             <Stat
               label="Capacity"
-              value={`${formatNumber(cap)} coins · ${hoursToFill(pack, dragon).toFixed(1)}h`}
+              value={
+                banked >= cap
+                  ? `${formatNumber(cap)} coins — full`
+                  : `${formatNumber(banked)} / ${formatNumber(cap)} coins`
+              }
             />
           </div>
 
           <IvPanel pack={pack} dragon={dragon} />
 
-          {!atMax && affordableFood.length > 0 && (
+          {!atMax && (
             <div>
-              <p className="eyebrow mb-1.5">Feed</p>
+              <p className="eyebrow mb-1.5">
+                Feed · {pack.balance.xpPerFood} xp per food
+                {needed !== null && ` · ${formatNumber(needed)} to next level`}
+              </p>
               <div className="flex flex-wrap gap-1.5">
-                {affordableFood.map((f) => (
+                {[1, 10, 100].map((n) => (
                   <Button
-                    key={f.id}
-                    onClick={() => act((s) => feed(pack, s, dragon.id, f.id, 1))}
-                    disabled={save.food < f.foodCost}
-                    title={`${f.foodCost} food → ${f.xp} xp`}
+                    key={n}
+                    onClick={() => act((s) => feed(pack, s, dragon.id, n))}
+                    disabled={!save.adminMode && save.food < n}
                   >
-                    {f.name}
-                    <span className="num text-muted">{f.foodCost}</span>
+                    +{n}
                   </Button>
                 ))}
+                <Button
+                  variant="solid"
+                  onClick={() => act((s) => feedToNextLevel(pack, s, dragon.id))}
+                  disabled={!save.adminMode && save.food <= 0}
+                >
+                  {needed !== null && !save.adminMode && save.food < needed
+                    ? "Feed all I have"
+                    : "To next level"}
+                </Button>
               </div>
             </div>
           )}

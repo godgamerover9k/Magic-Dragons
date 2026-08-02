@@ -26,9 +26,31 @@ export function SectionHeading({
   aside?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="eyebrow">{label}</h2>
-      {aside}
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="eyebrow min-w-0 truncate">{label}</h2>
+      {aside && <div className="shrink-0">{aside}</div>}
+    </div>
+  );
+}
+
+/**
+ * Figures read badly inside a heading on a narrow screen — wide letter-spacing
+ * plus a long string wraps into an unreadable block. They get their own row,
+ * with the number leading and the label underneath.
+ */
+export function StatStrip({
+  items,
+}: {
+  items: { label: string; value: string }[];
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap gap-x-5 gap-y-2">
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <p className="num text-sm leading-tight">{item.value}</p>
+          <p className="eyebrow">{item.label}</p>
+        </div>
+      ))}
     </div>
   );
 }

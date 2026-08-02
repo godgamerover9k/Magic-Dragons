@@ -31,7 +31,7 @@ export function BakeryTab({ game }: { game: Game }) {
   return (
     <div className="space-y-3">
       <SectionHeading
-        label={`Bakeries · ${save.bakeries.length}/${pack.balance.maxBakeries}`}
+        label={`Bakeries ${save.bakeries.length}/${pack.balance.maxBakeries}`}
         aside={
           <Button
             variant="solid"
@@ -75,7 +75,8 @@ export function BakeryTab({ game }: { game: Game }) {
 
       <p className="px-1 text-[11px] text-muted">
         Ovens only run when you give them something to make. Bigger orders cost more and
-        take longer, but pay far better per minute.
+        take longer, but pay far better per minute. All food goes to one pile — spend it
+        on whichever dragons you like.
       </p>
     </div>
   );

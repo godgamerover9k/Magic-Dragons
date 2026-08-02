@@ -132,6 +132,18 @@ export function xpToNextLevel(
   return Math.round(levelXpBase * Math.pow(dragon.level, levelXpExponent) * mult);
 }
 
+/**
+ * Food needed to carry a dragon to its next level, accounting for its IV. Null
+ * when it is already at the ceiling.
+ */
+export function foodToNextLevel(pack: ContentPack, dragon: Dragon): number | null {
+  if (isMaxLevel(pack, dragon)) return null;
+  const missing = Math.max(xpToNextLevel(pack, dragon) - dragon.xp, 0);
+  const perFood = pack.balance.xpPerFood * (1 + ivBonus(pack, dragon, "growth"));
+  if (perFood <= 0) return null;
+  return Math.max(1, Math.ceil(missing / perFood));
+}
+
 export function isMaxLevel(pack: ContentPack, dragon: Dragon): boolean {
   return dragon.level >= pack.balance.maxLevel;
 }

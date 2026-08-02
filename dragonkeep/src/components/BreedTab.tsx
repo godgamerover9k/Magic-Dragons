@@ -4,13 +4,15 @@ import { useMemo, useState } from "react";
 import { buildPool } from "@/game/breeding";
 import { colorOf, formatDuration } from "@/game/economy";
 import { cancelBreeding, claimHatchling, nameOf, startBreeding } from "@/game/engine";
+import { HatchOverlay, type Hatched } from "./HatchOverlay";
 import { taxonPath } from "@/game/taxonomy";
 import type { Dragon } from "@/game/types";
 import type { Game } from "@/game/useGame";
 import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function BreedTab({ game }: { game: Game }) {
-  const { pack, save, now, act } = game;
+  const { pack, save, now, act, setSave, notify } = game;
+  const [hatched, setHatched] = useState<Hatched | null>(null);
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
 
@@ -19,10 +21,27 @@ export function BreedTab({ game }: { game: Game }) {
 
   const pool = useMemo(() => {
     if (!save || !parentA || !parentB) return null;
-    return buildPool(pack, parentA, parentB, save.discovered);
+    return buildPool(pack, parentA, parentB);
   }, [pack, save, parentA, parentB]);
 
   if (!save) return null;
+
+  /**
+   * Hatching is handled here rather than through `act` so the new dragon can be
+   * picked out of the result and shown before it disappears into the roost.
+   */
+  const hatch = () => {
+    const before = new Set(save.dragons.map((d) => d.id));
+    const result = claimHatchling(pack, save, Date.now());
+    if (!result.ok) {
+      notify(result.message, false);
+      return;
+    }
+    const born = result.save.dragons.find((d) => !before.has(d.id));
+    const isNew = born ? !save.discovered.includes(born.speciesId) : false;
+    setSave(result.save);
+    if (born) setHatched({ dragon: born, isNew });
+  };
 
   const nest = save.breeding;
   if (nest) {
@@ -31,6 +50,13 @@ export function BreedTab({ game }: { game: Game }) {
     const pb = save.dragons.find((d) => d.id === nest.parentB);
     return (
       <div className="space-y-3">
+        {hatched && (
+          <HatchOverlay
+            pack={pack}
+            hatched={hatched}
+            onClose={() => setHatched(null)}
+          />
+        )}
         <SectionHeading label="Nest" />
         <Panel className="p-4 text-center">
           <p className="eyebrow">
@@ -49,7 +75,7 @@ export function BreedTab({ game }: { game: Game }) {
               variant="solid"
               size="md"
               disabled={!ready}
-              onClick={() => act((s) => claimHatchling(pack, s, Date.now()))}
+              onClick={hatch}
             >
               Hatch
             </Button>
@@ -73,6 +99,14 @@ export function BreedTab({ game }: { game: Game }) {
 
   return (
     <div className="space-y-3">
+      {hatched && (
+        <HatchOverlay
+          pack={pack}
+          hatched={hatched}
+          onClose={() => setHatched(null)}
+        />
+      )}
+
       <SectionHeading label="Pairing" />
 
       <div className="grid grid-cols-2 gap-2">
@@ -83,11 +117,7 @@ export function BreedTab({ game }: { game: Game }) {
       {pool && save.adminMode && (
         <Panel className="p-3">
           <div className="mb-2 flex items-center justify-between">
-            <p className="eyebrow">
-              {pool.exclusiveRule
-                ? `Guaranteed — ${pool.exclusiveRule.label}`
-                : `Possible outcomes · ${pool.entries.length}`}
-            </p>
+            <p className="eyebrow">Possible outcomes · {pool.entries.length}</p>
             <span className="eyebrow text-verdigris">admin only</span>
           </div>
           <ul className="space-y-1.5">

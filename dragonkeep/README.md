@@ -11,7 +11,26 @@ each rule is visible. Replace all of it in Admin.
 | Earth Dragon | Earth | 4,500 | 3.6 | 24 min |
 | Water Dragon | Water | 8,100 | 4.2 | 30 min |
 | Air Dragon | Air | bred only | 9.7 | 45 min |
-| Elder Dragon | Elemental | bred only | 228 | 90 min |
+| Elemental Dragon | Elemental | bred only | 15 | 45 min |
+
+### Combos
+
+| Parents | Result | Roughly |
+|---|---|---|
+| Fire + Water | Air | 23% |
+| Earth + Water | Plant | 23% |
+| Fire + Plant | Inferno | 17% |
+| Plant + Plant | Life | 11% |
+| Earth + Fire | Lava | 4% |
+| Fire + Fire | Inferno | 1% |
+| any two different Elementals | Elemental | 2-3% |
+| Elemental + Earth | Metal | 20% |
+| any two at IV 0 | Corruption | 17% |
+| one parent at IV 0 | Corruption | 1.5% |
+| any two at IV 31 | Perfection | 43% |
+| one parent at IV 31 | Perfection | 1.5% |
+
+Percentages assume both parents sit in the pool at the default weight of 50.
 
 There are no rarity tiers. Every dragon states its own output outright, and can
 optionally set its own accent colour, xp multiplier, merge costs, max tier,
@@ -27,7 +46,7 @@ A text-based dragon collecting game. Next.js App Router, deployable to Vercel as
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm run check    # engine self-tests (78 checks)
+npm run check    # engine self-tests (103 checks)
 npm run build    # production build
 ```
 
@@ -39,6 +58,27 @@ npm run build    # production build
 
 Without Supabase keys the game plays fine and saves to the browser. Add the keys
 and accounts switch on. See *Accounts* below.
+
+## Shipping content changes
+
+The shipped content lives in `src/game/pack.json`, not in any TypeScript file.
+The loop is:
+
+1. Design it in **Admin** on the live site. The validator flags broken
+   references as you go.
+2. Raise **Version** in Admin -> Files.
+3. Press **Download content pack**. It saves as `pack.json`.
+4. On GitHub, replace `src/game/pack.json` with that file and commit.
+
+Vercel rebuilds on its own. Anyone still holding an older version is moved onto
+the new pack the next time they open the game.
+
+The version number is what makes that happen. A browser keeps whatever pack it
+last saw - including a player's own Admin edits - unless the repo ships a higher
+version, in which case the shipped one wins. Forget to raise it and returning
+players will not see your changes.
+
+`src/game/content.ts` now does nothing but read that JSON.
 
 ## Adding a dragon (no code)
 
@@ -54,8 +94,7 @@ Open the **Admin** tab in the running game.
 4. **Files -> Download content pack** - this is your backup. Browser storage is
    not one.
 
-To ship your changes to everyone: replace `src/game/content.ts` with the
-downloaded JSON, or load the pack file at runtime.
+To ship your changes to everyone, see *Shipping content changes* above.
 
 ## How breeding works
 
@@ -75,9 +114,14 @@ weight on top. Three ways to match a pair, all usable in one rule:
 | Anything in a branch | The parent sits anywhere under that taxon |
 | Anything with a tag | The parent carries that tag |
 
-Rules match in either order. A rule marked **guaranteed** throws away the rest of
-the pool, which is how you write a fixed result - see "The Founders' Rite" in the
-base set.
+Conditions can require a minimum tier or level, an IV floor or ceiling on
+**both** parents or on **either** parent, or that the two parents be different
+dragons — which is what turns "anything in this branch" into "any two distinct
+members of it".
+
+Rules match in either order, and they only ever ADD weight. Nothing can remove
+the parents from the pool, so no pairing is ever a certainty - every breed keeps
+a real chance of returning a parent.
 
 ## Layout
 
@@ -133,8 +177,33 @@ timer is decided by whatever is inside the egg, not by the parents - so a long
 wait quietly tells the player something rare is coming. Dragons that set no time
 fall back to `defaultIncubationSeconds`.
 
-The placeholders run from one minute for the commons to an hour for the
-legendary.
+The base set runs from 5 minutes for a Fire Dragon to 24 hours for a Perfection
+Dragon.
+
+## Hatching
+
+Hatching takes over the screen, because it is the only moment a player learns
+what a pairing produced - the odds are hidden during play.
+
+- **A dragon already in the codex** shows everything at once and gets out of the
+  way.
+- **A dragon new to the codex** is revealed in stages: the egg, then the name,
+  then its figures. Confetti falls.
+- **A flawless roll** (IV 31) puts a shine across the card and calls it out.
+
+Both can happen together. The confetti scatter is derived from the dragon's id
+rather than `Math.random`, so it is stable across re-renders, and every effect
+is disabled under `prefers-reduced-motion`.
+
+## Odds calculator
+
+Admin -> Odds calculator. Pick any two dragons, set their tier, level and IVs,
+and it shows the pool a real breed would build: every possible result, the
+weight behind it, which rules contributed, and the resulting percentage.
+
+You do not need to own either parent. It also lists rules that matched the pair
+but were turned away, with the reason - usually the fastest way to find out why
+a combo is not appearing.
 
 ## Admin mode
 
@@ -174,6 +243,28 @@ multiple between them keeps shrinking, so a large roost stays reachable.
 
 The result is that space for dragons is something a player can keep buying,
 while parallel food production is not.
+
+## Food
+
+Ovens produce food into one pool. There are no recipes and no food types — a
+unit of food is a unit of food, worth `xpPerFood` experience, and the player
+decides which dragon gets it.
+
+Each order yields a different amount:
+
+| Order | Cost | Time | Food |
+|---|---|---|---|
+| Scraps | free | 2m | 12 |
+| Small Order | 1,350 | 10m | 80 |
+| Standing Order | 8,100 | 1h | 600 |
+| Banquet | 45,000 | 6h | 4,500 |
+
+On a dragon card, **+1 / +10 / +100** feed fixed amounts and **To next level**
+feeds exactly enough to level up. If there is not enough food for that, it feeds
+everything available instead of refusing, and says how far short it fell.
+
+A dragon's growth IV makes its food go further, so the amount needed is
+per-dragon rather than a flat table.
 
 ## Coin storage
 

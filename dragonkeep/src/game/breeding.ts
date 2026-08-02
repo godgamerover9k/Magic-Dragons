@@ -15,8 +15,9 @@ import type {
 //   3. Duplicate species have their weights summed.
 //   4. One roll against the summed total picks the winner.
 //
-// An `exclusive` rule throws away everything else and IS the pool — that is how
-// you write a guaranteed result. Among exclusives, highest priority wins.
+// Rules only ever ADD weight. Nothing can remove the parents from the pool, so
+// no pairing is ever a certainty and every breed keeps some chance of returning
+// a parent.
 // ---------------------------------------------------------------------------
 
 export interface PoolEntry {
@@ -29,8 +30,6 @@ export interface PoolEntry {
 export interface BreedingPool {
   entries: PoolEntry[];
   totalWeight: number;
-  /** Set when an exclusive rule took over the pool. */
-  exclusiveRule: BreedingRule | null;
   appliedRules: BreedingRule[];
 }
 
@@ -73,7 +72,6 @@ export function conditionsMet(
   rule: BreedingRule,
   p1: Dragon,
   p2: Dragon,
-  discovered: SpeciesId[],
 ): boolean {
   const c = rule.conditions;
   if (!c) return true;
@@ -84,28 +82,57 @@ export function conditionsMet(
     (p1.level < c.minLevel || p2.level < c.minLevel)
   )
     return false;
-  if (c.onlyIfUndiscovered?.some((id) => discovered.includes(id))) return false;
-  if (c.requiresDiscovered?.some((id) => !discovered.includes(id))) return false;
+  if (c.differentSpecies && p1.speciesId === p2.speciesId) return false;
+  if (c.minIv !== undefined && ((p1.iv ?? 0) < c.minIv || (p2.iv ?? 0) < c.minIv))
+    return false;
+  if (c.maxIv !== undefined && ((p1.iv ?? 0) > c.maxIv || (p2.iv ?? 0) > c.maxIv))
+    return false;
+  if (c.minIvEither !== undefined && Math.max(p1.iv ?? 0, p2.iv ?? 0) < c.minIvEither)
+    return false;
+  if (c.maxIvEither !== undefined && Math.min(p1.iv ?? 0, p2.iv ?? 0) > c.maxIvEither)
+    return false;
   return true;
+}
+
+/**
+ * A throwaway dragon for inspecting a pool without owning anything. Used by the
+ * odds calculator in Admin.
+ */
+export function probeDragon(
+  speciesId: SpeciesId,
+  opts: { tier?: number; level?: number; iv?: number } = {},
+): Dragon {
+  return {
+    id: `probe_${speciesId}_${opts.tier ?? 1}_${opts.iv ?? 0}`,
+    speciesId,
+    nickname: null,
+    tier: opts.tier ?? 1,
+    level: opts.level ?? 1,
+    xp: 0,
+    bornAt: 0,
+    parentIds: null,
+    iv: opts.iv ?? 0,
+    locked: false,
+    favorite: false,
+    lastCollectedAt: 0,
+    uncollectedCoins: 0,
+    notes: "",
+    custom: {},
+  };
 }
 
 export function buildPool(
   pack: ContentPack,
   p1: Dragon,
   p2: Dragon,
-  discovered: SpeciesId[],
 ): BreedingPool {
   const applied: BreedingRule[] = [];
-  let exclusive: BreedingRule | null = null;
 
   for (const rule of pack.breedingRules) {
     if (!rule.enabled) continue;
     if (!ruleMatchesPair(pack, rule, p1, p2)) continue;
-    if (!conditionsMet(rule, p1, p2, discovered)) continue;
+    if (!conditionsMet(rule, p1, p2)) continue;
     applied.push(rule);
-    if (rule.exclusive) {
-      if (!exclusive || rule.priority > exclusive.priority) exclusive = rule;
-    }
   }
 
   const totals = new Map<SpeciesId, PoolEntry>();
@@ -122,26 +149,17 @@ export function buildPool(
     }
   };
 
-  if (exclusive) {
-    for (const o of exclusive.outcomes) add(o.speciesId, o.weight, exclusive.label);
-  } else {
-    const pw = pack.balance.parentWeight;
-    add(p1.speciesId, pw, "Parent");
-    add(p2.speciesId, pw, "Parent");
-    for (const rule of applied) {
-      for (const o of rule.outcomes) add(o.speciesId, o.weight, rule.label);
-    }
+  const pw = pack.balance.parentWeight;
+  add(p1.speciesId, pw, "Parent");
+  add(p2.speciesId, pw, "Parent");
+  for (const rule of applied) {
+    for (const o of rule.outcomes) add(o.speciesId, o.weight, rule.label);
   }
 
   const entries = [...totals.values()].sort((a, b) => b.weight - a.weight);
   const totalWeight = entries.reduce((sum, e) => sum + e.weight, 0);
 
-  return {
-    entries,
-    totalWeight,
-    exclusiveRule: exclusive,
-    appliedRules: applied,
-  };
+  return { entries, totalWeight, appliedRules: applied };
 }
 
 /** Picks an entry. `roll` is 0-1; injectable so tests stay deterministic. */

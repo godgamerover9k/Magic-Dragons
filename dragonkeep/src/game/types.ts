@@ -117,10 +117,19 @@ export interface RuleConditions {
   minTier?: number;
   /** Both parents must be at least this level. */
   minLevel?: number;
-  /** Only fires while these species are still undiscovered. */
-  onlyIfUndiscovered?: SpeciesId[];
-  /** Only fires once these species have been discovered. */
-  requiresDiscovered?: SpeciesId[];
+  /**
+   * Both parents must be different dragons. Lets a rule mean "any two distinct
+   * members of this branch" rather than firing on a pair of the same kind.
+   */
+  differentSpecies?: boolean;
+  /** Both parents must have at least this individual value. */
+  minIv?: number;
+  /** Both parents must have at most this individual value. */
+  maxIv?: number;
+  /** At least one parent must have this individual value or higher. */
+  minIvEither?: number;
+  /** At least one parent must have this individual value or lower. */
+  maxIvEither?: number;
 }
 
 export interface BreedingRule {
@@ -131,12 +140,6 @@ export interface BreedingRule {
   b: Matcher;
   outcomes: Outcome[];
   conditions?: RuleConditions;
-  /**
-   * If true, this rule REPLACES the whole pool instead of adding to it.
-   * Use for guaranteed results. Highest priority exclusive rule wins.
-   */
-  exclusive: boolean;
-  priority: number;
   enabled: boolean;
   notes?: string;
 }
@@ -186,15 +189,6 @@ export interface FoodBatch {
   food: number;
 }
 
-export interface FoodType {
-  id: string;
-  name: string;
-  /** Food units required to cook one portion. */
-  foodCost: number;
-  /** XP granted per portion fed. */
-  xp: number;
-}
-
 export interface BalanceConfig {
   startingCoins: number;
   startingFood: number;
@@ -234,7 +228,8 @@ export interface BalanceConfig {
   bakeryCost: number;
   /** Each additional bakery costs this much more than the last. */
   bakeryCostGrowth: number;
-  foodTypes: FoodType[];
+  /** Experience a single unit of food is worth. */
+  xpPerFood: number;
   foodBatches: FoodBatch[];
 }
 
@@ -243,6 +238,12 @@ export interface BalanceConfig {
 export interface ContentPack {
   /** Bumped when the shape changes, so old saves can be migrated. */
   schemaVersion: number;
+  /**
+   * Your content version. Raise it whenever you ship changes: a player holding
+   * an older pack is moved onto the new one automatically. Leave it alone and
+   * their own Admin edits survive.
+   */
+  version: number;
   name: string;
   taxa: Record<TaxonId, Taxon>;
   species: Record<SpeciesId, Species>;
