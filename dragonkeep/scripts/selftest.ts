@@ -1,0 +1,789 @@
+import assert from "node:assert";
+import { buildPool, chanceOf, rollPool } from "../src/game/breeding";
+import { defaultContentPack } from "../src/game/content";
+import {
+  coinCap,
+  coinsPerHour,
+  hoursToFill,
+  nextBakeryCost,
+  nextRoostSlotCost,
+  ovenState,
+  powerOf,
+  tierOneCost,
+  grantXp,
+  incubationSeconds,
+  ivBonus,
+  mergeCost,
+  pendingCoins,
+  xpToNextLevel,
+} from "../src/game/economy";
+import {
+  buildBakery,
+  buySpecies,
+  claimHatchling,
+  collectBatch,
+  createDragon,
+  feed,
+  merge,
+  newGame,
+  rollIv,
+  setAdminMode,
+  startBatch,
+  startBreeding,
+} from "../src/game/engine";
+import { migrateSave, validatePack } from "../src/game/storage";
+import { isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
+import { IV_MAX, IV_MIN, type Dragon } from "../src/game/types";
+
+const pack = defaultContentPack();
+const NOW = 1_700_000_000_000;
+const LATER = NOW + 100_000_000;
+let passed = 0;
+const check = (label: string, fn: () => void) => {
+  fn();
+  passed++;
+  console.log("  ok  " + label);
+};
+const make = (speciesId: string, iv = 0) => ({
+  ...createDragon(pack, speciesId, { now: NOW, rng: () => 0.5 }),
+  iv,
+});
+
+console.log("\nContent");
+check("placeholder pack validates clean", () => {
+  const issues = validatePack(pack).filter((i) => i.level === "error");
+  assert.deepStrictEqual(issues, [], JSON.stringify(issues, null, 2));
+});
+
+check("every dragon can actually be obtained", () => {
+  const warnings = validatePack(pack).filter((i) =>
+    i.message.includes("No way to obtain"),
+  );
+  assert.deepStrictEqual(warnings, []);
+});
+
+console.log("\nTaxonomy");
+check("arbitrary depth ancestry resolves", () => {
+  assert.strictEqual(taxonPath(pack, "fire"), "Dragon › Elemental › Fire");
+  assert.ok(isWithin(pack, "fire", "dragon"));
+  assert.ok(!isWithin(pack, "fire", "water"));
+});
+
+check("deleting a branch rehomes its dragons and sub-branches", () => {
+  const { pack: after, error } = removeTaxon(pack, "elemental", "dragon");
+  assert.strictEqual(error, null);
+  assert.strictEqual(after.taxa["elemental"], undefined);
+  assert.strictEqual(after.taxa["fire"].parentId, "dragon");
+  assert.strictEqual(Object.keys(after.species).length, Object.keys(pack.species).length);
+});
+
+check("deleting a branch moves the dragons sitting on it", () => {
+  const { pack: after, error } = removeTaxon(pack, "fire", "elemental");
+  assert.strictEqual(error, null);
+  assert.strictEqual(after.species["fire-dragon"].taxonId, "elemental");
+});
+
+check("dragons cannot be stranded at the top level", () => {
+  const { error } = removeTaxon(pack, "fire", null);
+  assert.ok(error);
+  assert.match(error!, /need a branch/);
+});
+
+check("an empty branch deletes cleanly", () => {
+  const stripped = {
+    ...pack,
+    species: Object.fromEntries(
+      Object.entries(pack.species).filter(([, s]) => s.taxonId !== "air"),
+    ),
+  };
+  const { pack: after, error } = removeTaxon(stripped, "air", null);
+  assert.strictEqual(error, null);
+  assert.strictEqual(after.taxa["air"], undefined);
+});
+
+check("a destination inside the doomed branch is refused", () => {
+  const { error } = removeTaxon(pack, "elemental", "fire");
+  assert.ok(error);
+});
+
+check("rules pointing at a deleted branch are redirected", () => {
+  const { pack: after } = removeTaxon(pack, "water", "dragon");
+  const rule = after.breedingRules.find((r) => r.id === "rule-example-taxon")!;
+  assert.strictEqual(rule.b.kind, "taxon");
+  assert.strictEqual((rule.b as { taxonId: string }).taxonId, "dragon");
+});
+
+check("removal leaves the pack valid", () => {
+  const { pack: after } = removeTaxon(pack, "elemental", "dragon");
+  assert.deepStrictEqual(validatePack(after).filter((i) => i.level === "error"), []);
+});
+
+console.log("\nBreeding pool");
+const one = make("fire-dragon");
+const two = make("earth-dragon");
+const three = make("air-dragon");
+
+check("parents are always in the pool", () => {
+  const pool = buildPool(pack, one, two, []);
+  assert.ok(pool.entries.some((e) => e.speciesId === "fire-dragon"));
+  assert.ok(pool.entries.some((e) => e.speciesId === "earth-dragon"));
+});
+
+check("a named pair rule fires", () => {
+  const pool = buildPool(pack, one, two, []);
+  assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-species"));
+});
+
+check("a branch rule fires for parents under the named elements", () => {
+  const four = make("water-dragon");
+  const pool = buildPool(pack, one, four, []);
+  assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-taxon"));
+  // Earth is not one of the two elements the rule names.
+  assert.ok(
+    !buildPool(pack, two, four, []).appliedRules.some(
+      (r) => r.id === "rule-example-taxon",
+    ),
+  );
+});
+
+check("a tag rule crosses branches", () => {
+  const pool = buildPool(pack, one, three, []);
+  assert.ok(pool.appliedRules.some((r) => r.id === "rule-example-tag"));
+  assert.ok(!pool.appliedRules.some((r) => r.id === "rule-example-taxon"));
+});
+
+check("rules match in either order", () => {
+  const fwd = buildPool(pack, one, two, []);
+  const rev = buildPool(pack, two, one, []);
+  assert.strictEqual(fwd.totalWeight, rev.totalWeight);
+});
+
+check("weights sum and probabilities total 1", () => {
+  const pool = buildPool(pack, one, two, []);
+  const sum = pool.entries.reduce((n, e) => n + e.weight, 0);
+  assert.strictEqual(sum, pool.totalWeight);
+  const p = pool.entries.reduce((n, e) => n + chanceOf(pool, e.speciesId), 0);
+  assert.ok(Math.abs(p - 1) < 1e-9);
+});
+
+check("tier conditions gate a rule", () => {
+  const four = make("water-dragon");
+  assert.strictEqual(chanceOf(buildPool(pack, three, four, []), "elder-dragon"), 0);
+  const pool = buildPool(pack, { ...three, tier: 2 }, { ...four, tier: 2 }, []);
+  assert.strictEqual(chanceOf(pool, "elder-dragon"), 1);
+});
+
+check("exclusive rules replace the entire pool", () => {
+  const a = { ...three, tier: 2 };
+  const b = { ...make("water-dragon"), tier: 2 };
+  const pool = buildPool(pack, a, b, []);
+  assert.strictEqual(pool.entries.length, 1);
+  assert.strictEqual(rollPool(pool, 0.999), "elder-dragon");
+});
+
+check("exclusive stops firing once discovered", () => {
+  const a = { ...three, tier: 2 };
+  const b = { ...make("water-dragon"), tier: 2 };
+  assert.strictEqual(buildPool(pack, a, b, ["elder-dragon"]).exclusiveRule, null);
+});
+
+check("roll boundaries land in the right bucket", () => {
+  const pool = buildPool(pack, one, two, []);
+  assert.strictEqual(rollPool(pool, 0), pool.entries[0].speciesId);
+  assert.ok(rollPool(pool, 1) !== null);
+  const counts = new Map<string, number>();
+  for (let i = 0; i < 20000; i++) {
+    const id = rollPool(pool, i / 20000)!;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  for (const entry of pool.entries) {
+    const observed = (counts.get(entry.speciesId) ?? 0) / 20000;
+    assert.ok(Math.abs(observed - chanceOf(pool, entry.speciesId)) < 0.01);
+  }
+});
+
+console.log("\nEconomy");
+check("production scales with level and tier", () => {
+  const flat = make("fire-dragon");
+  const base = coinsPerHour(pack, flat);
+  assert.ok(coinsPerHour(pack, { ...flat, level: 10 }) > base);
+  assert.ok(coinsPerHour(pack, { ...flat, tier: 3 }) > coinsPerHour(pack, { ...flat, tier: 2 }));
+  assert.ok(coinsPerHour(pack, make("water-dragon")) > base);
+});
+
+check("banked coins accrue at the stated rate, then stop at the cap", () => {
+  const d = make("fire-dragon");
+  const rate = coinsPerHour(pack, d);
+  // Half the fill window, so the cap is not yet in play.
+  const halfway = (hoursToFill(pack, d) / 2) * 3_600_000;
+  assert.ok(Math.abs(pendingCoins(pack, d, NOW + halfway) - rate * (halfway / 3_600_000)) <= 1);
+  assert.strictEqual(pendingCoins(pack, d, NOW + 3_600_000 * 500), coinCap(pack, d));
+});
+
+check("an introductory dragon fills in about twenty minutes", () => {
+  const minutes = hoursToFill(pack, make("fire-dragon")) * 60;
+  assert.ok(Math.abs(minutes - 20) < 1, `filled in ${minutes.toFixed(1)} minutes`);
+});
+
+check("introductory output is about three coins a minute", () => {
+  const perMinute = coinsPerHour(pack, make("fire-dragon")) / 60;
+  assert.ok(Math.abs(perMinute - 3) < 0.2, `earned ${perMinute.toFixed(2)} a minute`);
+});
+
+check("a fully raised introductory dragon reaches about twenty a minute", () => {
+  const maxed = { ...make("fire-dragon"), level: pack.balance.maxLevel, tier: 5 };
+  const perMinute = coinsPerHour(pack, maxed) / 60;
+  assert.ok(Math.abs(perMinute - 20) < 1.5, `earned ${perMinute.toFixed(2)} a minute`);
+});
+
+check("better dragons hold longer before they stop", () => {
+  const fire = hoursToFill(pack, make("fire-dragon"));
+  const earth = hoursToFill(pack, make("earth-dragon"));
+  const water = hoursToFill(pack, make("water-dragon"));
+  assert.ok(water > earth && earth > fire);
+});
+
+check("xp curve rises, and a dragon can make its own steeper", () => {
+  const common = make("fire-dragon");
+  const steeper = make("elder-dragon");
+  assert.ok(xpToNextLevel(pack, { ...common, level: 5 }) > xpToNextLevel(pack, common));
+  assert.ok(xpToNextLevel(pack, steeper) > xpToNextLevel(pack, common));
+});
+
+check("a dragon can set its own storage hours", () => {
+  const tuned = {
+    ...pack,
+    species: {
+      ...pack.species,
+      "fire-dragon": { ...pack.species["fire-dragon"], coinStorageHours: 2 },
+    },
+  };
+  const d = make("fire-dragon");
+  assert.strictEqual(coinCap(tuned, d), Math.round(coinsPerHour(tuned, d) * 2));
+  // The override wins over the global setting, in whichever direction.
+  const expected = coinsPerHour(pack, d) * pack.balance.coinStorageHours;
+  assert.ok(Math.abs(coinCap(pack, d) - expected) < 1);
+  assert.notStrictEqual(coinCap(tuned, d), coinCap(pack, d));
+});
+
+check("introductory dragons hit their pacing targets", () => {
+  const fire = make("fire-dragon");
+  // 3 coins a minute, filling in about 20 minutes, straight out of the shop.
+  assert.ok(Math.abs(coinsPerHour(pack, fire) / 60 - 3) < 0.3);
+  assert.ok(Math.abs(hoursToFill(pack, fire) * 60 - 20) < 2);
+
+  // About 20 a minute once fully raised.
+  const maxed = { ...fire, level: pack.balance.maxLevel, tier: pack.balance.maxTier };
+  assert.ok(Math.abs(coinsPerHour(pack, maxed) / 60 - 20) < 2);
+});
+
+check("better dragons hold more before they stop", () => {
+  const order = ["fire-dragon", "earth-dragon", "water-dragon", "air-dragon"];
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(
+      hoursToFill(pack, make(order[i])) > hoursToFill(pack, make(order[i - 1])),
+      `${order[i]} should outlast ${order[i - 1]}`,
+    );
+  }
+});
+
+check("a flat cap overrides the hours and does not scale", () => {
+  const tuned = {
+    ...pack,
+    species: {
+      ...pack.species,
+      "fire-dragon": {
+        ...pack.species["fire-dragon"],
+        coinStorageHours: 99,
+        coinCapacity: 500,
+      },
+    },
+  };
+  const low = make("fire-dragon");
+  const high = { ...low, level: 30, tier: 4 };
+  assert.strictEqual(coinCap(tuned, low), 500);
+  assert.strictEqual(coinCap(tuned, high), 500);
+  assert.ok(coinsPerHour(tuned, high) > coinsPerHour(tuned, low));
+});
+
+check("banked coins stop at the dragon's own cap", () => {
+  const tuned = {
+    ...pack,
+    species: {
+      ...pack.species,
+      "fire-dragon": { ...pack.species["fire-dragon"], coinCapacity: 100 },
+    },
+  };
+  const d = make("fire-dragon");
+  assert.strictEqual(pendingCoins(tuned, d, NOW + 3_600_000 * 500), 100);
+});
+
+check("dragons with no limit set fall back to the global one", () => {
+  const d = make("fire-dragon");
+  assert.strictEqual(
+    coinCap(pack, d),
+    Math.round(coinsPerHour(pack, d) * pack.balance.coinStorageHours),
+  );
+});
+
+check("level and tier fold into one power number", () => {
+  const base = make("fire-dragon");
+  assert.strictEqual(powerOf(pack, base), 1);
+  assert.strictEqual(powerOf(pack, { ...base, level: 10 }), 10);
+  const w = pack.balance.power.tierWeight;
+  assert.strictEqual(powerOf(pack, { ...base, tier: 2 }), w);
+  assert.strictEqual(powerOf(pack, { ...base, level: 5, tier: 3 }), 5 * w * w);
+});
+
+check("two dragons of equal power produce equally", () => {
+  const w = pack.balance.power.tierWeight;
+  const levelled = { ...make("fire-dragon"), level: w };
+  const tiered = { ...make("fire-dragon"), level: 1, tier: 2 };
+  assert.strictEqual(powerOf(pack, levelled), powerOf(pack, tiered));
+  assert.strictEqual(coinsPerHour(pack, levelled), coinsPerHour(pack, tiered));
+  assert.strictEqual(coinCap(pack, levelled), coinCap(pack, tiered));
+});
+
+check("power has diminishing returns", () => {
+  const base = make("fire-dragon");
+  const one = coinsPerHour(pack, base);
+  const ten = coinsPerHour(pack, { ...base, level: 10 });
+  const hundred = coinsPerHour(pack, { ...base, level: 100 });
+  // Ten times the power must give less than ten times the output, twice over.
+  assert.ok(ten < one * 10);
+  assert.ok(hundred < ten * 10);
+});
+
+check("a fully raised weak dragon cannot out-earn a fresh strong one", () => {
+  const maxedCommon = { ...make("fire-dragon", IV_MAX), level: pack.balance.maxLevel };
+  const freshLegendary = make("elder-dragon", IV_MIN);
+  assert.ok(
+    coinsPerHour(pack, freshLegendary) > coinsPerHour(pack, maxedCommon),
+    `raised ${coinsPerHour(pack, maxedCommon)} vs fresh ${coinsPerHour(pack, freshLegendary)}`,
+  );
+});
+
+check("a tier step beats grinding levels", () => {
+  const base = make("fire-dragon");
+  const tiered = { ...base, tier: 2 };
+  const levelled = { ...base, level: 5 };
+  assert.ok(coinsPerHour(pack, tiered) > coinsPerHour(pack, levelled));
+});
+
+check("high tiers compound in tier 1 dragons", () => {
+  const costs = pack.balance.mergeCosts;
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 1), 1);
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 2), costs[0] + 1);
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 3), (costs[0] + 1) * (costs[1] + 1));
+  // Each further tier should cost dramatically more than the last.
+  for (let tier = 2; tier <= 5; tier++) {
+    assert.ok(tierOneCost(pack, "fire-dragon", tier) > tierOneCost(pack, "fire-dragon", tier - 1) * 2);
+  }
+});
+
+check("a tier can only be built from the tier below", () => {
+  let save = newGame(pack, NOW);
+  const target = save.dragons[0];
+  // Duplicates two tiers down are not eligible fodder for a tier 2 target.
+  const t2 = { ...createDragon(pack, target.speciesId, { now: NOW }), tier: 2 };
+  const t1s = [0, 1, 2, 3].map(() => createDragon(pack, target.speciesId, { now: NOW }));
+  save = { ...save, dragons: [t2, ...t1s], roostCapacity: 20 };
+  const wrong = merge(pack, save, t2.id);
+  assert.ok(!wrong.ok, "tier 1 duplicates should not raise a tier 2 dragon");
+});
+
+check("capacity outruns production as a dragon is raised", () => {
+  const base = make("fire-dragon");
+  const levelled = { ...base, level: 20 };
+  const tiered = { ...base, tier: 3 };
+  assert.ok(hoursToFill(pack, levelled) > hoursToFill(pack, base));
+  assert.ok(hoursToFill(pack, tiered) > hoursToFill(pack, base));
+  // Both still earn more per hour than they did.
+  assert.ok(coinsPerHour(pack, levelled) > coinsPerHour(pack, base));
+  assert.ok(coinsPerHour(pack, tiered) > coinsPerHour(pack, base));
+});
+
+check("a merge raises the cap faster than the output", () => {
+  const t1 = make("fire-dragon");
+  const t2 = { ...t1, tier: 2 };
+  const capRatio = coinCap(pack, t2) / coinCap(pack, t1);
+  const rateRatio = coinsPerHour(pack, t2) / coinsPerHour(pack, t1);
+  assert.ok(capRatio > rateRatio, `cap ${capRatio} vs rate ${rateRatio}`);
+});
+
+console.log("\nIndividual value");
+check("the roll stays inside 0-31", () => {
+  for (let i = 0; i < 2000; i++) {
+    const d = createDragon(pack, "fire-dragon", { now: NOW });
+    assert.ok(Number.isInteger(d.iv), `iv is not an integer: ${d.iv}`);
+    assert.ok(d.iv >= IV_MIN && d.iv <= IV_MAX, `iv out of range: ${d.iv}`);
+  }
+});
+
+check("both ends of the range are reachable", () => {
+  assert.strictEqual(createDragon(pack, "fire-dragon", { rng: () => 0 }).iv, IV_MIN);
+  assert.strictEqual(
+    createDragon(pack, "fire-dragon", { rng: () => 0.9999 }).iv,
+    IV_MAX,
+  );
+});
+
+check("a perfect roll pays its full magnitude", () => {
+  const worst = make("fire-dragon", IV_MIN);
+  const best = make("fire-dragon", IV_MAX);
+  assert.strictEqual(ivBonus(pack, worst, "production"), 0);
+  assert.ok(
+    Math.abs(ivBonus(pack, best, "production") - pack.iv.productionMagnitude) < 1e-9,
+  );
+  const ratio = coinsPerHour(pack, best) / coinsPerHour(pack, worst);
+  assert.ok(Math.abs(ratio - (1 + pack.iv.productionMagnitude)) < 0.02);
+});
+
+check("the curve makes the low end nearly worthless", () => {
+  const gapLow =
+    ivBonus(pack, make("fire-dragon", 4), "production") -
+    ivBonus(pack, make("fire-dragon", 0), "production");
+  const gapHigh =
+    ivBonus(pack, make("fire-dragon", 31), "production") -
+    ivBonus(pack, make("fire-dragon", 30), "production");
+  // A four-point gap at the bottom must matter less than a one-point gap at the top.
+  assert.ok(gapHigh > gapLow, `low ${gapLow} vs high ${gapHigh}`);
+  assert.ok(ivBonus(pack, make("fire-dragon", 4), "production") < 0.01);
+});
+
+check("a straight curve restores a proportional payout", () => {
+  const linear = { ...pack, iv: { ...pack.iv, curveExponent: 1 } };
+  const mid = make("fire-dragon", 16);
+  const expected = linear.iv.productionMagnitude * (16 / IV_MAX);
+  assert.ok(Math.abs(ivBonus(linear, mid, "production") - expected) < 1e-9);
+});
+
+check("disadvantage skews rolls low without shrinking the range", () => {
+  const rolls: number[] = [];
+  for (let i = 0; i < 20000; i++) rolls.push(rollIv(pack));
+  const mean = rolls.reduce((a, b) => a + b, 0) / rolls.length;
+  // Two d32 keeping the worse averages about 10, against 15.5 for a single roll.
+  assert.ok(mean < 12, `mean was ${mean}`);
+  assert.ok(rolls.includes(IV_MAX), "31 should still be reachable");
+  assert.ok(rolls.includes(IV_MIN));
+  const perfect = rolls.filter((r) => r === IV_MAX).length / rolls.length;
+  assert.ok(perfect < 1 / 31, "a perfect roll should be rarer than flat odds");
+});
+
+check("disadvantage can be switched off", () => {
+  const flat = { ...pack, iv: { ...pack.iv, disadvantage: false } };
+  const rolls: number[] = [];
+  for (let i = 0; i < 20000; i++) rolls.push(rollIv(flat));
+  const mean = rolls.reduce((a, b) => a + b, 0) / rolls.length;
+  assert.ok(Math.abs(mean - IV_MAX / 2) < 1, `mean was ${mean}`);
+});
+
+check("growth magnitude is honoured when set", () => {
+  const tuned = { ...pack, iv: { ...pack.iv, growthMagnitude: 0.5 } };
+  const worst = make("fire-dragon", IV_MIN);
+  const best = make("fire-dragon", IV_MAX);
+  // Kept under the first level threshold so the comparison is of raw xp, not
+  // of whatever remainder is left after a level-up.
+  const small = 30;
+  assert.ok(grantXp(tuned, best, small).dragon.xp > grantXp(tuned, worst, small).dragon.xp);
+  assert.strictEqual(
+    grantXp(pack, best, small).dragon.xp,
+    grantXp(pack, worst, small).dragon.xp,
+  );
+});
+
+check("the value never changes after birth", () => {
+  const d = make("fire-dragon", 12);
+  assert.strictEqual(grantXp(pack, d, 5000).dragon.iv, 12);
+});
+
+check("ivs do not pass down from parents", () => {
+  const save = newGame(pack, NOW);
+  const perfect = save.dragons.map((d) => ({ ...d, iv: IV_MAX }));
+  const seeded = { ...save, dragons: perfect, roostCapacity: 9 };
+  let allPerfect = true;
+  for (let i = 0; i < 60; i++) {
+    const bred = startBreeding(pack, seeded, perfect[0].id, perfect[1].id, NOW);
+    const hatched = claimHatchling(pack, bred.save, LATER);
+    const child = hatched.save.dragons[hatched.save.dragons.length - 1];
+    if (child.iv !== IV_MAX) allPerfect = false;
+  }
+  assert.ok(!allPerfect, "hatchlings appear to inherit parent IVs");
+});
+
+check("older saves are repaired rather than dropped", () => {
+  const save = newGame(pack, NOW);
+  const legacy = {
+    ...save,
+    dragons: save.dragons.map((d) => {
+      const copy: Record<string, unknown> = { ...d };
+      delete copy.iv;
+      copy.traits = { productionBonus: 0.1, growthRate: 1, marks: [] };
+      copy.ivs = { vigour: 20, appetite: 4 };
+      return copy as unknown as Dragon;
+    }),
+  };
+  const fixed = migrateSave(pack, legacy);
+  assert.strictEqual(fixed.dragons.length, save.dragons.length);
+  for (const d of fixed.dragons) {
+    assert.ok(!("traits" in d));
+    assert.ok(!("ivs" in d));
+    assert.ok(d.iv >= IV_MIN && d.iv <= IV_MAX);
+  }
+});
+
+console.log("\nIncubation");
+check("each dragon can set its own incubation", () => {
+  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 60);
+  assert.strictEqual(incubationSeconds(pack, "elder-dragon"), 3600);
+  assert.ok(
+    incubationSeconds(pack, "air-dragon") > incubationSeconds(pack, "water-dragon"),
+  );
+});
+
+check("a dragon with no time set falls back to the default", () => {
+  const stripped = {
+    ...pack,
+    species: {
+      ...pack.species,
+      "fire-dragon": { ...pack.species["fire-dragon"], incubationSeconds: undefined },
+    },
+  };
+  assert.strictEqual(
+    incubationSeconds(stripped, "fire-dragon"),
+    pack.balance.defaultIncubationSeconds,
+  );
+});
+
+check("the egg timer matches the dragon inside it", () => {
+  const save = { ...newGame(pack, NOW), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const nest = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1).save.breeding!;
+  assert.strictEqual(
+    nest.readyAt - nest.startedAt,
+    incubationSeconds(pack, nest.resultSpeciesId) * 1000,
+  );
+});
+
+check("an egg cannot be hatched early", () => {
+  const save = { ...newGame(pack, NOW), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
+  const early = claimHatchling(pack, bred.save, NOW + 1000);
+  assert.ok(!early.ok);
+  assert.match(early.message, /not hatched/);
+});
+
+console.log("\nCosts");
+check("perches grow polynomially", () => {
+  const start = pack.balance.roostCapacity;
+  const costs = Array.from({ length: 8 }, (_, i) => nextRoostSlotCost(pack, start + i));
+  // Always rising.
+  for (let i = 1; i < costs.length; i++) assert.ok(costs[i] > costs[i - 1]);
+  // The multiple between successive perches falls away — that is what makes it
+  // polynomial rather than exponential.
+  const ratios = costs.slice(1).map((c, i) => c / costs[i]);
+  for (let i = 1; i < ratios.length; i++)
+    assert.ok(ratios[i] < ratios[i - 1], `ratio rose at step ${i}`);
+  // The nth perch costs base × n ^ exponent.
+  const { roostSlotCost, roostSlotCostExponent } = pack.balance;
+  assert.strictEqual(costs[0], roostSlotCost);
+  assert.strictEqual(
+    costs[3],
+    Math.round(roostSlotCost * Math.pow(4, roostSlotCostExponent)),
+  );
+});
+
+check("bakeries grow exponentially", () => {
+  const costs = Array.from({ length: 5 }, (_, i) => nextBakeryCost(pack, i));
+  const growth = pack.balance.bakeryCostGrowth;
+  for (let i = 1; i < costs.length; i++) {
+    // A constant multiple every time, which is what perches deliberately are not.
+    assert.ok(Math.abs(costs[i] / costs[i - 1] - growth) < 0.01, `step ${i}`);
+  }
+  assert.strictEqual(costs[0], pack.balance.bakeryCost);
+});
+
+check("bakeries outrun perches given enough of each", () => {
+  const start = pack.balance.roostCapacity;
+  assert.ok(nextBakeryCost(pack, 6) > nextRoostSlotCost(pack, start + 6));
+});
+
+console.log("\nBakeries");
+check("an oven starts idle and takes an order", () => {
+  const save = { ...newGame(pack, NOW), coins: 10000 };
+  const built = buildBakery(pack, save, NOW);
+  assert.ok(built.ok, built.message);
+  const oven = built.save.bakeries[0];
+  assert.strictEqual(ovenState(oven, NOW), "idle");
+  const started = startBatch(pack, built.save, oven.id, "batch-2", NOW);
+  assert.ok(started.ok, started.message);
+  assert.strictEqual(ovenState(started.save.bakeries[0], NOW), "baking");
+});
+
+check("the cheapest order is free", () => {
+  const save = { ...newGame(pack, NOW), coins: 0 };
+  const built = buildBakery(pack, { ...save, coins: 10000 }, NOW);
+  const broke = { ...built.save, coins: 0 };
+  const started = startBatch(pack, broke, broke.bakeries[0].id, "batch-1", NOW);
+  assert.ok(started.ok, started.message);
+});
+
+check("bigger orders cost more, take longer and pay better", () => {
+  const batches = pack.balance.foodBatches;
+  for (let i = 1; i < batches.length; i++) {
+    assert.ok(batches[i].coinCost > batches[i - 1].coinCost);
+    assert.ok(batches[i].seconds > batches[i - 1].seconds);
+    assert.ok(batches[i].food > batches[i - 1].food);
+    const rate = (b: (typeof batches)[number]) => b.food / b.seconds;
+    assert.ok(rate(batches[i]) > rate(batches[i - 1]), "later orders should pay better per minute");
+  }
+});
+
+check("an order cannot be collected early, and pays out once done", () => {
+  const built = buildBakery(pack, { ...newGame(pack, NOW), coins: 10000 }, NOW);
+  const oven = built.save.bakeries[0];
+  const started = startBatch(pack, built.save, oven.id, "batch-1", NOW);
+  const early = collectBatch(pack, started.save, oven.id, NOW + 1000);
+  assert.ok(!early.ok);
+  const batch = pack.balance.foodBatches[0];
+  const done = collectBatch(pack, started.save, oven.id, NOW + batch.seconds * 1000);
+  assert.ok(done.ok, done.message);
+  assert.strictEqual(done.save.food - started.save.food, batch.food);
+  assert.strictEqual(done.save.bakeries[0].batchId, null);
+});
+
+check("a busy oven refuses a second order", () => {
+  const built = buildBakery(pack, { ...newGame(pack, NOW), coins: 10000 }, NOW);
+  const oven = built.save.bakeries[0];
+  const started = startBatch(pack, built.save, oven.id, "batch-2", NOW);
+  const again = startBatch(pack, started.save, oven.id, "batch-1", NOW + 1000);
+  assert.ok(!again.ok);
+});
+
+console.log("\nAdmin mode");
+check("nothing is spent while admin mode is on", () => {
+  const save = { ...newGame(pack, NOW), adminMode: true, coins: 0, food: 0 };
+  const built = buildBakery(pack, save, NOW);
+  assert.ok(built.ok, built.message);
+  assert.strictEqual(built.save.coins, 0);
+  const bought = buySpecies(pack, built.save, "fire-dragon", NOW);
+  assert.ok(bought.ok, bought.message);
+  assert.strictEqual(bought.save.coins, 0);
+  const fed = feed(pack, bought.save, bought.save.dragons[0].id, "food-4", 5);
+  assert.ok(fed.ok, fed.message);
+  assert.strictEqual(fed.save.food, 0);
+});
+
+check("the roost never fills in admin mode", () => {
+  const save = { ...newGame(pack, NOW), adminMode: true, roostCapacity: 1 };
+  const bought = buySpecies(pack, save, "fire-dragon", NOW);
+  assert.ok(bought.ok, bought.message);
+});
+
+check("admin mode can skip an egg", () => {
+  const save = { ...newGame(pack, NOW), adminMode: true };
+  const [a, b] = save.dragons;
+  const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
+  const hatched = claimHatchling(pack, bred.save, NOW, () => 0.5);
+  assert.ok(hatched.ok, hatched.message);
+});
+
+check("costs apply again once admin mode is off", () => {
+  const save = { ...newGame(pack, NOW), adminMode: true, coins: 100 };
+  const off = setAdminMode(save, false).save;
+  assert.strictEqual(off.coins, 100);
+  const bought = buySpecies(pack, off, "fire-dragon", NOW);
+  assert.ok(!bought.ok);
+});
+
+console.log("\nActions");
+check("a fresh save has starters and discoveries", () => {
+  const save = newGame(pack, NOW);
+  assert.strictEqual(save.dragons.length, 2);
+  assert.strictEqual(save.discovered.length, 2);
+  assert.strictEqual(save.coins, pack.balance.startingCoins);
+});
+
+check("feeding spends food and grants levels", () => {
+  const save = newGame(pack, NOW);
+  const r = feed(pack, { ...save, food: 500 }, save.dragons[0].id, "food-1", 10);
+  assert.ok(r.ok, r.message);
+  assert.strictEqual(r.save.food, 450);
+  assert.ok(r.save.dragons[0].level > 1);
+});
+
+check("feeding without food is refused", () => {
+  const save = { ...newGame(pack, NOW), food: 0 };
+  const r = feed(pack, save, save.dragons[0].id, "food-1", 1);
+  assert.ok(!r.ok);
+  assert.match(r.message, /Not enough food/);
+});
+
+check("breeding then hatching adds a dragon", () => {
+  const save = newGame(pack, NOW);
+  const [a, b] = save.dragons;
+  const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
+  assert.ok(bred.ok, bred.message);
+  const hatched = claimHatchling(pack, bred.save, LATER, () => 0.5);
+  assert.ok(hatched.ok, hatched.message);
+  assert.strictEqual(hatched.save.dragons.length, 3);
+  assert.deepStrictEqual(hatched.save.dragons[2].parentIds, [a.id, b.id]);
+});
+
+check("a full roost blocks breeding", () => {
+  const save = { ...newGame(pack, NOW), roostCapacity: 2 };
+  const [a, b] = save.dragons;
+  const r = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
+  assert.ok(!r.ok);
+  assert.match(r.message, /full/);
+});
+
+check("merging consumes exactly the required duplicates", () => {
+  let save = newGame(pack, NOW);
+  const target = save.dragons[0];
+  const cost = mergeCost(pack, target)!;
+  for (let i = 0; i < cost; i++) {
+    save = { ...save, dragons: [...save.dragons, make(target.speciesId)] };
+  }
+  const before = save.dragons.length;
+  const r = merge(pack, save, target.id);
+  assert.ok(r.ok, r.message);
+  assert.strictEqual(r.save.dragons.length, before - cost);
+  assert.strictEqual(r.save.dragons.find((d) => d.id === target.id)!.tier, 2);
+});
+
+check("merging eats the weakest duplicates first", () => {
+  let save = newGame(pack, NOW);
+  const target = { ...save.dragons[0], iv: 5 };
+  save = { ...save, dragons: [target, save.dragons[1]] };
+  const strong = { ...make(target.speciesId, IV_MAX), id: "keep-me" };
+  const weak = { ...make(target.speciesId, IV_MIN), id: "eat-me" };
+  save = { ...save, dragons: [...save.dragons, strong, weak] };
+  const cost = mergeCost(pack, target)!;
+  assert.strictEqual(cost, 2, "base set expects 2 duplicates for tier 2");
+  const r = merge(pack, save, target.id);
+  assert.ok(r.ok, r.message);
+  assert.ok(!r.save.dragons.some((d) => d.id === "eat-me"));
+});
+
+check("locked duplicates are never eaten", () => {
+  let save = newGame(pack, NOW);
+  const target = save.dragons[0];
+  const cost = mergeCost(pack, target)!;
+  for (let i = 0; i < cost; i++) {
+    save = { ...save, dragons: [...save.dragons, { ...make(target.speciesId), locked: true }] };
+  }
+  const r = merge(pack, save, target.id);
+  assert.ok(!r.ok);
+  assert.match(r.message, /unlocked duplicates/);
+});
+
+check("merging across different tiers is refused", () => {
+  let save = newGame(pack, NOW);
+  const target = save.dragons[0];
+  save = { ...save, dragons: [...save.dragons, { ...make(target.speciesId), tier: 2 }] };
+  assert.ok(!merge(pack, save, target.id).ok);
+});
+
+console.log(`\n${passed} checks passed\n`);
