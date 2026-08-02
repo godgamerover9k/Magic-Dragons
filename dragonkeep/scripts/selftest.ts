@@ -34,7 +34,7 @@ import {
   startBreeding,
 } from "../src/game/engine";
 import { migrateSave, validatePack } from "../src/game/storage";
-import { isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
+import { branchUnder, isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
 import { IV_MAX, IV_MIN, type Dragon } from "../src/game/types";
 
 const pack = defaultContentPack();
@@ -66,7 +66,7 @@ check("every dragon can actually be obtained", () => {
 
 console.log("\nTaxonomy");
 check("arbitrary depth ancestry resolves", () => {
-  assert.strictEqual(taxonPath(pack, "fire"), "Dragon › Elemental › Fire");
+  assert.strictEqual(taxonPath(pack, "fire"), "Dragon › Elemental › Base Elements › Fire");
   assert.ok(isWithin(pack, "fire", "dragon"));
   assert.ok(!isWithin(pack, "fire", "water"));
 });
@@ -75,7 +75,10 @@ check("deleting a branch rehomes its dragons and sub-branches", () => {
   const { pack: after, error } = removeTaxon(pack, "elemental", "dragon");
   assert.strictEqual(error, null);
   assert.strictEqual(after.taxa["elemental"], undefined);
-  assert.strictEqual(after.taxa["fire"].parentId, "dragon");
+  // Its direct children move up, not its grandchildren.
+  assert.strictEqual(after.taxa["base-elements"].parentId, "dragon");
+  assert.strictEqual(after.taxa["hybrid"].parentId, "dragon");
+  assert.strictEqual(after.taxa["fire"].parentId, "base-elements");
   assert.strictEqual(Object.keys(after.species).length, Object.keys(pack.species).length);
 });
 
@@ -109,8 +112,23 @@ check("a destination inside the doomed branch is refused", () => {
 });
 
 check("rules pointing at a deleted branch are redirected", () => {
-  const { pack: after } = removeTaxon(pack, "elemental", "dragon");
-  const rule = after.breedingRules.find((r) => r.id === "rule-elemental-cross")!;
+  // No shipped rule uses a taxon matcher, so this adds one to aim at the branch.
+  const withTaxonRule = {
+    ...pack,
+    breedingRules: [
+      ...pack.breedingRules,
+      {
+        id: "rule-taxon-probe",
+        label: "Probe",
+        a: { kind: "taxon" as const, taxonId: "elemental", includeDescendants: true },
+        b: { kind: "taxon" as const, taxonId: "elemental", includeDescendants: true },
+        outcomes: [{ speciesId: "fire-dragon", weight: 5 }],
+        enabled: true,
+      },
+    ],
+  };
+  const { pack: after } = removeTaxon(withTaxonRule, "elemental", "dragon");
+  const rule = after.breedingRules.find((r) => r.id === "rule-taxon-probe")!;
   assert.strictEqual(rule.a.kind, "taxon");
   assert.strictEqual((rule.a as { taxonId: string }).taxonId, "dragon");
   assert.strictEqual((rule.b as { taxonId: string }).taxonId, "dragon");
@@ -146,6 +164,38 @@ check("air comes from fire and water", () => {
   assert.strictEqual(chanceOf(buildPool(pack, fire, fire), "air-dragon"), 0);
 });
 
+check("no dragon carries a tag", () => {
+  for (const s of Object.values(pack.species))
+    assert.deepStrictEqual(s.tags, [], `${s.name} still has tags`);
+});
+
+check("base elements are their own branch inside Elemental", () => {
+  // Membership is by placement, not by a list — Inferno sits inside Fire and so
+  // counts, which is what lets a dragon be adopted into an element.
+  const base = Object.values(pack.species)
+    .filter((s) => isWithin(pack, s.taxonId, "base-elements"))
+    .map((s) => s.id)
+    .sort();
+  assert.deepStrictEqual(base, [
+    "air-dragon",
+    "earth-dragon",
+    "fire-dragon",
+    "inferno-dragon",
+    "water-dragon",
+  ]);
+});
+
+check("hybrids sit under Elemental too", () => {
+  for (const id of ["lava-dragon", "metal-dragon", "elemental-dragon"]) {
+    const s = pack.species[id];
+    assert.ok(isWithin(pack, s.taxonId, "elemental"), `${s.name} left the branch`);
+    assert.ok(
+      !isWithin(pack, s.taxonId, "base-elements"),
+      `${s.name} counts as a base element`,
+    );
+  }
+});
+
 check("the elemental dragon needs two distinct elements", () => {
   const combos: [string, string][] = [
     ["fire-dragon", "water-dragon"],
@@ -176,7 +226,7 @@ check("the elemental dragon stays rare", () => {
 
 check("distinctness is enforced by the condition, not the matcher", () => {
   const rule = pack.breedingRules.find((r) => r.id === "rule-elemental-cross")!;
-  assert.strictEqual(rule.conditions?.differentSpecies, true);
+  assert.strictEqual(rule.conditions?.differentBranchUnder, "base-elements");
   const relaxed = {
     ...pack,
     breedingRules: pack.breedingRules.map((r) =>
@@ -299,6 +349,60 @@ const combo = (a: string, b: string, result: string, iv = 5) => {
   return chanceOf(pool, result);
 };
 
+check("inferno counts as a base element", () => {
+  assert.strictEqual(pack.species["inferno-dragon"].taxonId, "fire");
+  for (const other of ["water-dragon", "earth-dragon", "air-dragon"])
+    assert.ok(
+      combo("inferno-dragon", other, "elemental-dragon") > 0,
+      `inferno x ${other}`,
+    );
+});
+
+check("two dragons of the same element cannot cross", () => {
+  // Inferno is filed inside Fire, so it is the same element as a Fire Dragon
+  // however different the two are as dragons.
+  assert.strictEqual(combo("fire-dragon", "inferno-dragon", "elemental-dragon"), 0);
+  for (const id of ["fire-dragon", "earth-dragon", "water-dragon", "air-dragon"])
+    assert.strictEqual(combo(id, id, "elemental-dragon"), 0, `${id} with itself`);
+});
+
+check("the element is found however deeply a dragon is nested", () => {
+  // A dragon two levels inside Fire still reads as Fire.
+  const deep = {
+    ...pack,
+    taxa: {
+      ...pack.taxa,
+      ember: {
+        id: "ember",
+        name: "Ember",
+        parentId: "fire",
+        rank: "",
+        description: "",
+        custom: {},
+      },
+    },
+    species: {
+      ...pack.species,
+      "inferno-dragon": { ...pack.species["inferno-dragon"], taxonId: "ember" },
+    },
+  };
+  assert.strictEqual(branchUnder(deep, "ember", "base-elements"), "fire");
+  const pool = buildPool(deep, make("fire-dragon"), make("inferno-dragon"));
+  assert.strictEqual(chanceOf(pool, "elemental-dragon"), 0);
+  const across = buildPool(deep, make("water-dragon"), make("inferno-dragon"));
+  assert.ok(chanceOf(across, "elemental-dragon") > 0);
+});
+
+check("dragons outside the branch cannot stand in for a base element", () => {
+  for (const id of ["lava-dragon", "plant-dragon", "metal-dragon", "life-dragon"]) {
+    assert.strictEqual(
+      combo("fire-dragon", id, "elemental-dragon"),
+      0,
+      `fire x ${id} should not reach an Elemental`,
+    );
+  }
+});
+
 check("earth and fire make lava, and rarely", () => {
   const odds = combo("earth-dragon", "fire-dragon", "lava-dragon");
   assert.ok(odds > 0 && odds < 0.08, `odds were ${odds}`);
@@ -356,6 +460,57 @@ check("ether sits behind perfection", () => {
       `elemental x ${id}`,
     );
   }
+});
+
+check("transcendent splits into physical and duality", () => {
+  assert.strictEqual(pack.taxa["physical"].parentId, "transcendent");
+  assert.strictEqual(pack.taxa["duality"].parentId, "transcendent");
+  for (const id of ["perfection-dragon", "corruption-dragon"]) {
+    const s = pack.species[id];
+    assert.strictEqual(s.taxonId, "duality", `${s.name} is not in Duality`);
+    assert.ok(isWithin(pack, s.taxonId, "transcendent"));
+  }
+  // Nothing sits loose on the Transcendent node itself any more.
+  assert.deepStrictEqual(
+    Object.values(pack.species).filter((s) => s.taxonId === "transcendent"),
+    [],
+  );
+});
+
+check("special sits inside elemental", () => {
+  assert.strictEqual(pack.taxa["special"].parentId, "elemental");
+  for (const id of ["life-dragon", "monster-dragon"]) {
+    const s = pack.species[id];
+    assert.ok(isWithin(pack, s.taxonId, "elemental"), `${s.name} is outside Elemental`);
+    // Still not a base element, so the cross rule cannot pick it up.
+    assert.ok(!isWithin(pack, s.taxonId, "base-elements"), `${s.name} counts as base`);
+  }
+});
+
+check("the elemental cross rule matches only base elements", () => {
+  const rule = pack.breedingRules.find((r) => r.id === "rule-elemental-cross")!;
+  for (const m of [rule.a, rule.b]) {
+    assert.strictEqual(m.kind, "taxon");
+    assert.strictEqual((m as { taxonId: string }).taxonId, "base-elements");
+  }
+  // Anything else under Elemental is excluded. The Elemental Dragon itself is
+  // skipped, since pairing with it leaves it in the pool as a parent.
+  for (const id of ["life-dragon", "monster-dragon", "lava-dragon", "plant-dragon"])
+    assert.strictEqual(combo("fire-dragon", id, "elemental-dragon"), 0, `fire x ${id}`);
+});
+
+check("life is a branch inside special", () => {
+  assert.strictEqual(pack.taxa["life"].parentId, "special");
+  for (const id of ["life-dragon", "monster-dragon", "plant-dragon"]) {
+    assert.strictEqual(pack.species[id].taxonId, "life");
+    assert.ok(isWithin(pack, "life", "special"));
+    assert.ok(isWithin(pack, "life", "elemental"));
+  }
+  // Nothing sits loose on Special itself.
+  assert.deepStrictEqual(
+    Object.values(pack.species).filter((s) => s.taxonId === "special"),
+    [],
+  );
 });
 
 check("corruption and life make monster", () => {
@@ -787,6 +942,70 @@ check("ivs do not pass down from parents", () => {
     if (child.iv !== IV_MAX) allPerfect = false;
   }
   assert.ok(!allPerfect, "hatchlings appear to inherit parent IVs");
+});
+
+check("a dragon whose species was deleted is dropped on load", () => {
+  const save = newGame(pack, NOW);
+  const ghost = { ...save.dragons[0], id: "ghost", speciesId: "deleted-dragon" };
+  const stale = {
+    ...save,
+    dragons: [...save.dragons, ghost],
+    discovered: [...save.discovered, "deleted-dragon"],
+  };
+  const fixed = migrateSave(pack, stale);
+  assert.ok(!fixed.dragons.some((d) => d.id === "ghost"));
+  assert.ok(!fixed.discovered.includes("deleted-dragon"));
+  // Everything real survives.
+  assert.strictEqual(fixed.dragons.length, save.dragons.length);
+});
+
+check("an egg of a deleted dragon is cleared", () => {
+  const save = newGame(pack, NOW);
+  const [a, b] = save.dragons;
+  const withEgg = {
+    ...save,
+    breeding: {
+      parentA: a.id,
+      parentB: b.id,
+      startedAt: NOW,
+      readyAt: NOW + 1000,
+      resultSpeciesId: "deleted-dragon",
+    },
+  };
+  assert.strictEqual(migrateSave(pack, withEgg).breeding, null);
+});
+
+check("an egg whose parents were dropped is cleared", () => {
+  const save = newGame(pack, NOW);
+  const ghost = { ...save.dragons[0], id: "ghost", speciesId: "deleted-dragon" };
+  const withEgg = {
+    ...save,
+    dragons: [...save.dragons, ghost],
+    breeding: {
+      parentA: "ghost",
+      parentB: save.dragons[1].id,
+      startedAt: NOW,
+      readyAt: NOW + 1000,
+      resultSpeciesId: "fire-dragon",
+    },
+  };
+  assert.strictEqual(migrateSave(pack, withEgg).breeding, null);
+});
+
+check("a real egg survives migration", () => {
+  const save = newGame(pack, NOW);
+  const [a, b] = save.dragons;
+  const withEgg = {
+    ...save,
+    breeding: {
+      parentA: a.id,
+      parentB: b.id,
+      startedAt: NOW,
+      readyAt: NOW + 1000,
+      resultSpeciesId: "fire-dragon",
+    },
+  };
+  assert.ok(migrateSave(pack, withEgg).breeding);
 });
 
 check("older saves are repaired rather than dropped", () => {

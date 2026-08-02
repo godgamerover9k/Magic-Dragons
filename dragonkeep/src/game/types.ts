@@ -130,6 +130,11 @@ export interface RuleConditions {
   minIvEither?: number;
   /** At least one parent must have this individual value or lower. */
   maxIvEither?: number;
+  /**
+   * Both parents must sit in different sub-branches of this taxon. Two dragons
+   * filed in the same element are turned away, however deeply either is nested.
+   */
+  differentBranchUnder?: TaxonId;
 }
 
 export interface BreedingRule {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 12,
+  "version": 21,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -22,7 +22,7 @@
     "fire": {
       "id": "fire",
       "name": "Fire",
-      "parentId": "elemental",
+      "parentId": "base-elements",
       "rank": "Element",
       "description": "",
       "custom": {}
@@ -30,7 +30,7 @@
     "earth": {
       "id": "earth",
       "name": "Earth",
-      "parentId": "elemental",
+      "parentId": "base-elements",
       "rank": "Element",
       "description": "",
       "custom": {}
@@ -38,7 +38,7 @@
     "water": {
       "id": "water",
       "name": "Water",
-      "parentId": "elemental",
+      "parentId": "base-elements",
       "rank": "Element",
       "description": "",
       "custom": {}
@@ -46,17 +46,9 @@
     "air": {
       "id": "air",
       "name": "Air",
-      "parentId": "elemental",
+      "parentId": "base-elements",
       "rank": "Element",
       "description": "",
-      "custom": {}
-    },
-    "hybrid": {
-      "id": "hybrid",
-      "name": "Hybrid",
-      "parentId": "dragon",
-      "rank": "Class",
-      "description": "Dragons born where two elements meet.",
       "custom": {}
     },
     "transcendent": {
@@ -66,6 +58,54 @@
       "rank": "Class",
       "description": "Dragons that are no longer of any element at all.",
       "custom": {}
+    },
+    "special": {
+      "id": "special",
+      "name": "Special",
+      "parentId": "elemental",
+      "rank": "Order",
+      "description": "Elements that arise rather than exist.",
+      "custom": {}
+    },
+    "hybrid": {
+      "id": "hybrid",
+      "name": "Hybrid",
+      "parentId": "elemental",
+      "rank": "Order",
+      "description": "Dragons born where elements meet.",
+      "custom": {}
+    },
+    "base-elements": {
+      "id": "base-elements",
+      "name": "Base Elements",
+      "parentId": "elemental",
+      "rank": "Order",
+      "description": "The four dragons every element begins with.",
+      "custom": {}
+    },
+    "physical": {
+      "id": "physical",
+      "name": "Physical",
+      "parentId": "transcendent",
+      "rank": "Order",
+      "description": "",
+      "custom": {}
+    },
+    "duality": {
+      "id": "duality",
+      "name": "Duality",
+      "parentId": "transcendent",
+      "rank": "Order",
+      "description": "Dragons defined by an extreme, in either direction.",
+      "custom": {}
+    },
+    "life": {
+      "id": "life",
+      "name": "Life",
+      "parentId": "special",
+      "rank": "Family",
+      "description": "",
+      "custom": {}
     }
   },
   "species": {
@@ -74,9 +114,7 @@
       "name": "Fire Dragon",
       "taxonId": "fire",
       "color": "#D9633F",
-      "tags": [
-        "example-tag"
-      ],
+      "tags": [],
       "baseProduction": 180,
       "incubationSeconds": 300,
       "obtainable": true,
@@ -117,9 +155,7 @@
       "name": "Air Dragon",
       "taxonId": "air",
       "color": "#9FB6C9",
-      "tags": [
-        "example-tag"
-      ],
+      "tags": [],
       "baseProduction": 583,
       "xpMultiplier": 1.25,
       "coinStorageHours": 0.75,
@@ -131,7 +167,7 @@
     "elemental-dragon": {
       "id": "elemental-dragon",
       "name": "Elemental Dragon",
-      "taxonId": "elemental",
+      "taxonId": "hybrid",
       "color": "#B98CD6",
       "baseProduction": 900,
       "incubationSeconds": 4500,
@@ -159,7 +195,7 @@
     "plant-dragon": {
       "id": "plant-dragon",
       "name": "Plant Dragon",
-      "taxonId": "hybrid",
+      "taxonId": "life",
       "color": "#6FAE55",
       "baseProduction": 500,
       "incubationSeconds": 1800,
@@ -173,7 +209,7 @@
     "inferno-dragon": {
       "id": "inferno-dragon",
       "name": "Inferno Dragon",
-      "taxonId": "hybrid",
+      "taxonId": "fire",
       "color": "#C2361F",
       "baseProduction": 1600,
       "incubationSeconds": 8100,
@@ -187,7 +223,7 @@
     "life-dragon": {
       "id": "life-dragon",
       "name": "Life Dragon",
-      "taxonId": "transcendent",
+      "taxonId": "life",
       "color": "#59C9A5",
       "baseProduction": 2500,
       "incubationSeconds": 10800,
@@ -201,7 +237,7 @@
     "perfection-dragon": {
       "id": "perfection-dragon",
       "name": "Perfection Dragon",
-      "taxonId": "transcendent",
+      "taxonId": "duality",
       "color": "#EFE7C8",
       "baseProduction": 5000,
       "incubationSeconds": 86400,
@@ -215,7 +251,7 @@
     "corruption-dragon": {
       "id": "corruption-dragon",
       "name": "Corruption Dragon",
-      "taxonId": "transcendent",
+      "taxonId": "duality",
       "color": "#6B4E8C",
       "baseProduction": 1200,
       "incubationSeconds": 21600,
@@ -243,7 +279,7 @@
     "monster-dragon": {
       "id": "monster-dragon",
       "name": "Monster Dragon",
-      "taxonId": "transcendent",
+      "taxonId": "life",
       "color": "#7A3B52",
       "baseProduction": 4000,
       "incubationSeconds": 18000,
@@ -257,7 +293,7 @@
     "ether-dragon": {
       "id": "ether-dragon",
       "name": "Ether Dragon",
-      "taxonId": "transcendent",
+      "taxonId": "physical",
       "color": "#C9BFE8",
       "baseProduction": 7500,
       "incubationSeconds": 64800,
@@ -297,31 +333,6 @@
       ],
       "enabled": true,
       "notes": "Two exact dragons. The parents stay in the pool, so this is a strong chance, not a certainty."
-    },
-    {
-      "id": "rule-elemental-cross",
-      "label": "Crossed elements",
-      "a": {
-        "kind": "taxon",
-        "taxonId": "elemental",
-        "includeDescendants": true
-      },
-      "b": {
-        "kind": "taxon",
-        "taxonId": "elemental",
-        "includeDescendants": true
-      },
-      "outcomes": [
-        {
-          "speciesId": "elemental-dragon",
-          "weight": 3
-        }
-      ],
-      "conditions": {
-        "differentSpecies": true
-      },
-      "enabled": true,
-      "notes": "Any two distinct members of the Elemental family. A slim chance, since it rides on a pool where each parent sits at 50."
     },
     {
       "id": "rule-lava",
@@ -566,6 +577,31 @@
       ],
       "enabled": true,
       "notes": "Needs a Perfection Dragon, so it sits at the very back of the tree."
+    },
+    {
+      "id": "rule-elemental-cross",
+      "label": "Two different elements",
+      "a": {
+        "kind": "taxon",
+        "taxonId": "base-elements",
+        "includeDescendants": true
+      },
+      "b": {
+        "kind": "taxon",
+        "taxonId": "base-elements",
+        "includeDescendants": true
+      },
+      "outcomes": [
+        {
+          "speciesId": "elemental-dragon",
+          "weight": 3
+        }
+      ],
+      "conditions": {
+        "differentBranchUnder": "base-elements"
+      },
+      "enabled": true,
+      "notes": "Both parents must be filed under Base Elements, in different elements. Two dragons from the same element - Fire and Inferno, say - are turned away."
     }
   ],
   "balance": {
@@ -631,6 +667,27 @@
         "coinCost": 45000,
         "seconds": 21600,
         "food": 4500
+      },
+      {
+        "id": "batch-5",
+        "name": "Harvest",
+        "coinCost": 260000,
+        "seconds": 43200,
+        "food": 12000
+      },
+      {
+        "id": "batch-6",
+        "name": "Granary Run",
+        "coinCost": 1500000,
+        "seconds": 86400,
+        "food": 32000
+      },
+      {
+        "id": "batch-7",
+        "name": "Season's Stores",
+        "coinCost": 9000000,
+        "seconds": 259200,
+        "food": 120000
       }
     ],
     "xpPerFood": 2.5

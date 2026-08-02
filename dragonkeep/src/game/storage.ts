@@ -79,7 +79,14 @@ export function clearAll() {
  * than discarding those dragons, give them a single fresh roll and move on.
  */
 export function migrateSave(pack: ContentPack, save: SaveGame): SaveGame {
-  const dragons = save.dragons.map((dragon) => {
+  // A dragon whose species has since been deleted from the pack has nothing to
+  // read its name, colour or branch from. Rather than leave it to crash a lookup
+  // somewhere, it is dropped here.
+  const known = (id: string) => Boolean(pack.species[id]);
+
+  const dragons = save.dragons
+    .filter((d) => known(d.speciesId))
+    .map((dragon) => {
     const patched = { ...dragon } as Dragon & Record<string, unknown>;
     if (typeof patched.iv !== "number" || patched.iv < IV_MIN || patched.iv > IV_MAX) {
       patched.iv = rollIv(pack);
@@ -100,11 +107,24 @@ export function migrateSave(pack: ContentPack, save: SaveGame): SaveGame {
     return oven;
   });
 
+  // An egg part-way through hatching something that no longer exists, or laid by
+  // parents that have since been dropped, is cleared rather than left dangling.
+  const ids = new Set(dragons.map((d) => d.id));
+  const breeding =
+    save.breeding &&
+    known(save.breeding.resultSpeciesId) &&
+    ids.has(save.breeding.parentA) &&
+    ids.has(save.breeding.parentB)
+      ? save.breeding
+      : null;
+
   return {
     ...save,
     schemaVersion: SCHEMA_VERSION,
     dragons,
     bakeries,
+    breeding,
+    discovered: (save.discovered ?? []).filter(known),
     adminMode: save.adminMode ?? false,
   };
 }

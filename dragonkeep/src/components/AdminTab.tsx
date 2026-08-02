@@ -270,7 +270,7 @@ function OddsCalculator({ pack }: { pack: ContentPack }) {
   const blocked = pack.breedingRules
     .filter((rule) => rule.enabled)
     .filter((rule) => ruleMatchesPair(pack, rule, parentA, parentB))
-    .filter((rule) => !conditionsMet(rule, parentA, parentB))
+    .filter((rule) => !conditionsMet(pack, rule, parentA, parentB))
     .map((rule) => {
       const c = rule.conditions ?? {};
       const reasons: string[] = [];
@@ -283,6 +283,10 @@ function OddsCalculator({ pack }: { pack: ContentPack }) {
       if (c.maxIv !== undefined && (ivA > c.maxIv || ivB > c.maxIv))
         reasons.push(`needs IV ${c.maxIv} or under`);
       if (c.differentSpecies && a === b) reasons.push("parents must differ");
+      if (c.differentBranchUnder !== undefined) {
+        const branch = pack.taxa[c.differentBranchUnder]?.name ?? c.differentBranchUnder;
+        reasons.push(`parents must be in different parts of ${branch}`);
+      }
       if (c.minIvEither !== undefined && Math.max(ivA, ivB) < c.minIvEither)
         reasons.push(`needs one parent at IV ${c.minIvEither}+`);
       if (c.maxIvEither !== undefined && Math.min(ivA, ivB) > c.maxIvEither)
@@ -1028,6 +1032,27 @@ function RulesEditor({
                   })
                 }
               />
+            </Field>
+            <Field label="Parents from different parts of">
+              <select
+                value={rule.conditions?.differentBranchUnder ?? ""}
+                onChange={(e) =>
+                  update({
+                    conditions: {
+                      ...rule.conditions,
+                      differentBranchUnder: e.target.value || undefined,
+                    },
+                  })
+                }
+              >
+                <option value="">(no requirement)</option>
+                {flattenTree(pack).map(({ taxon, depth }) => (
+                  <option key={taxon.id} value={taxon.id}>
+                    {"\u00A0".repeat(depth * 2)}
+                    {taxon.name}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="One parent at least IV">
               <input

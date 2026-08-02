@@ -1,4 +1,4 @@
-import { isWithin } from "./taxonomy";
+import { branchUnder, isWithin } from "./taxonomy";
 import type {
   BreedingRule,
   ContentPack,
@@ -69,6 +69,7 @@ export function ruleMatchesPair(
 }
 
 export function conditionsMet(
+  pack: ContentPack,
   rule: BreedingRule,
   p1: Dragon,
   p2: Dragon,
@@ -91,6 +92,15 @@ export function conditionsMet(
     return false;
   if (c.maxIvEither !== undefined && Math.min(p1.iv ?? 0, p2.iv ?? 0) > c.maxIvEither)
     return false;
+  if (c.differentBranchUnder !== undefined) {
+    const s1 = pack.species[p1.speciesId];
+    const s2 = pack.species[p2.speciesId];
+    if (!s1 || !s2) return false;
+    const b1 = branchUnder(pack, s1.taxonId, c.differentBranchUnder);
+    const b2 = branchUnder(pack, s2.taxonId, c.differentBranchUnder);
+    // Both must be inside it, and in different sub-branches of it.
+    if (!b1 || !b2 || b1 === b2) return false;
+  }
   return true;
 }
 
@@ -131,7 +141,7 @@ export function buildPool(
   for (const rule of pack.breedingRules) {
     if (!rule.enabled) continue;
     if (!ruleMatchesPair(pack, rule, p1, p2)) continue;
-    if (!conditionsMet(rule, p1, p2)) continue;
+    if (!conditionsMet(pack, rule, p1, p2)) continue;
     applied.push(rule);
   }
 

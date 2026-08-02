@@ -21,6 +21,7 @@ export function BreedTab({ game }: { game: Game }) {
 
   const pool = useMemo(() => {
     if (!save || !parentA || !parentB) return null;
+    if (!pack.species[parentA.speciesId] || !pack.species[parentB.speciesId]) return null;
     return buildPool(pack, parentA, parentB);
   }, [pack, save, parentA, parentB]);
 
@@ -123,7 +124,8 @@ export function BreedTab({ game }: { game: Game }) {
           <ul className="space-y-1.5">
             {pool.entries.map((entry) => {
               const species = pack.species[entry.speciesId];
-                            const pct = (entry.weight / pool.totalWeight) * 100;
+              if (!species) return null;
+              const pct = (entry.weight / pool.totalWeight) * 100;
               return (
                 <li key={entry.speciesId} className="flex items-center gap-2 text-sm">
                   <span
@@ -172,7 +174,8 @@ export function BreedTab({ game }: { game: Game }) {
         <div className="space-y-1.5">
           {save.dragons.map((d) => {
             const selected = d.id === a || d.id === b;
-            
+            const species = pack.species[d.speciesId];
+            if (!species) return null;
             return (
               <button
                 key={d.id}
@@ -189,7 +192,7 @@ export function BreedTab({ game }: { game: Game }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{nameOf(pack, d)}</span>
                   <span className="block truncate text-[11px] text-muted">
-                    {taxonPath(pack, pack.species[d.speciesId].taxonId)}
+                    {taxonPath(pack, species.taxonId)}
                   </span>
                 </span>
                 <span className="num shrink-0 text-xs text-muted">

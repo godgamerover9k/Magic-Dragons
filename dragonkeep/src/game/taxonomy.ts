@@ -114,6 +114,23 @@ export function validateReparent(
   return null;
 }
 
+/**
+ * The branch directly beneath `ancestorId` that `id` sits in, or null when it is
+ * not beneath it at all. Lets a rule ask "which element is this dragon in?"
+ * without caring how deeply it is filed inside that element.
+ */
+export function branchUnder(
+  pack: ContentPack,
+  id: TaxonId,
+  ancestorId: TaxonId,
+): TaxonId | null {
+  const line = ancestry(pack, id);
+  for (const taxon of line) {
+    if (taxon.parentId === ancestorId) return taxon.id;
+  }
+  return null;
+}
+
 /** What deleting a taxon would displace. */
 export function removalImpact(pack: ContentPack, id: TaxonId) {
   return {

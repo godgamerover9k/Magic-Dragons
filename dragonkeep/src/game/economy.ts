@@ -268,13 +268,24 @@ export function nextRoostSlotCost(pack: ContentPack, capacity: number): number {
 
 // --- Formatting ------------------------------------------------------------
 
+const SUFFIXES = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+
+/**
+ * Short-form numbers that keep going past a billion. Anything beyond the list
+ * falls back to exponent notation rather than printing a wall of digits.
+ */
 export function formatNumber(n: number): string {
   if (!Number.isFinite(n)) return "0";
+  const sign = n < 0 ? "-" : "";
   const abs = Math.abs(n);
-  if (abs >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + "B";
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
-  if (abs >= 10_000) return (n / 1000).toFixed(1) + "K";
-  return Math.round(n).toLocaleString("en-US");
+  if (abs < 10_000) return sign + Math.round(abs).toLocaleString("en-US");
+
+  const step = Math.floor(Math.log10(abs) / 3);
+  if (step >= SUFFIXES.length) return sign + abs.toExponential(2);
+
+  const scaled = abs / Math.pow(1000, step);
+  const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return sign + scaled.toFixed(digits) + SUFFIXES[step];
 }
 
 export function formatDuration(ms: number): string {
