@@ -95,6 +95,25 @@ export function createDragon(
   };
 }
 
+/**
+ * The one state a player cannot recover from: no dragons, and not enough coins
+ * to buy the cheapest one. Coins come from dragons, so nothing would ever
+ * change. Rather than let that happen, the purse is topped up to the price of
+ * the cheapest dragon on sale.
+ */
+export function ensureViable(pack: ContentPack, save: SaveGame): SaveGame {
+  if (save.dragons.length > 0 || save.breeding) return save;
+
+  const prices = Object.values(pack.species)
+    .filter((s) => s.obtainable && s.marketPrice && s.marketPrice > 0)
+    .map((s) => s.marketPrice as number);
+  if (prices.length === 0) return save;
+
+  const cheapest = Math.min(...prices);
+  if (save.coins >= cheapest) return save;
+  return { ...save, coins: cheapest };
+}
+
 export function newGame(pack: ContentPack, now = Date.now()): SaveGame {
   const dragons = pack.balance.startingSpecies
     .filter((id) => pack.species[id])
@@ -259,6 +278,7 @@ export function startBreeding(
       breeding: {
         parentA: aId,
         parentB: bId,
+        parentSpecies: [a.speciesId, b.speciesId],
         startedAt: now,
         readyAt: now + seconds * 1000,
         resultSpeciesId,
@@ -289,10 +309,25 @@ export function claimHatchling(
   });
 
   const isNew = !save.discovered.includes(hatchling.speciesId);
+
+  // Record what this pairing produced. Players compare notes; this is the note.
+  const fallback = [nest.parentA, nest.parentB]
+    .map((id) => save.dragons.find((d) => d.id === id)?.speciesId)
+    .filter(Boolean) as SpeciesId[];
+  const parents = nest.parentSpecies ?? fallback;
+  const log = { ...(save.breedingLog ?? {}) };
+  if (parents.length === 2) {
+    const key = pairKey(parents[0], parents[1]);
+    const row = { ...(log[key] ?? {}) };
+    row[hatchling.speciesId] = (row[hatchling.speciesId] ?? 0) + 1;
+    log[key] = row;
+  }
+
   return {
     save: {
       ...save,
       breeding: null,
+      breedingLog: log,
       dragons: [...save.dragons, hatchling],
       discovered: isNew ? [...save.discovered, hatchling.speciesId] : save.discovered,
     },
@@ -575,6 +610,11 @@ export function grantDragon(
     ok: true,
     message: `Granted ${pack.species[speciesId].name}.`,
   };
+}
+
+/** Stable key for a pairing, so A×B and B×A share a line in the log. */
+export function pairKey(a: SpeciesId, b: SpeciesId): string {
+  return [a, b].sort().join("+");
 }
 
 export function nameOf(pack: ContentPack, dragon: Dragon): string {

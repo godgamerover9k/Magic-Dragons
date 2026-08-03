@@ -11,6 +11,8 @@ export interface RemoteResult {
   message: string;
   save: SaveGame | null;
   pack: RedactedPack | null;
+  /** True when the request never reached the server at all. */
+  offline?: boolean;
 }
 
 async function token(): Promise<string | null> {
@@ -25,6 +27,7 @@ export interface Bootstrap {
   save: SaveGame | null;
   pack: RedactedPack | null;
   isAdmin: boolean;
+  reachable: boolean;
 }
 
 /**
@@ -39,16 +42,18 @@ export async function bootstrap(): Promise<Bootstrap> {
       headers: jwt ? { authorization: `Bearer ${jwt}` } : undefined,
       cache: "no-store",
     });
-    if (!res.ok) return { mode: "signedOut", save: null, pack: null, isAdmin: false };
+    if (!res.ok)
+      return { mode: "signedOut", save: null, pack: null, isAdmin: false, reachable: true };
     const body = await res.json();
     return {
       mode: body.mode ?? "signedOut",
       save: body.save ?? null,
       pack: body.pack ?? null,
       isAdmin: Boolean(body.isAdmin),
+      reachable: true,
     };
   } catch {
-    return { mode: "signedOut", save: null, pack: null, isAdmin: false };
+    return { mode: "signedOut", save: null, pack: null, isAdmin: false, reachable: false };
   }
 }
 
@@ -83,6 +88,12 @@ export async function sendAction(action: Action): Promise<RemoteResult> {
       pack: body?.pack ?? null,
     };
   } catch {
-    return { ok: false, message: "Could not reach the server.", save: null, pack: null };
+    return {
+      ok: false,
+      message: "Could not reach the server.",
+      save: null,
+      pack: null,
+      offline: true,
+    };
   }
 }

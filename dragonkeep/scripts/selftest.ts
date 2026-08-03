@@ -22,12 +22,14 @@ import {
   buildBakery,
   buySpecies,
   claimHatchling,
+  ensureViable,
   collectBatch,
   createDragon,
   feed,
   feedToNextLevel,
   merge,
   newGame,
+  pairKey,
   rollIv,
   setAdminMode,
   startBatch,
@@ -48,6 +50,19 @@ const check = (label: string, fn: () => void) => {
   passed++;
   console.log("  ok  " + label);
 };
+const ctx = (isAdmin = false) => ({ now: NOW, rng: () => 0.5, isAdmin });
+
+/**
+ * A save with dragons in it. New keepers now start empty — with coins for one
+ * Fire Dragon and nothing else — so tests that need a roost stock one.
+ */
+const seeded = (species: string[] = ["fire-dragon", "earth-dragon"]) => {
+  let save = newGame(pack, NOW);
+  for (const id of species)
+    save = applyAction(pack, save, { type: "grantDragon", speciesId: id }, ctx(true)).save;
+  return save;
+};
+
 const make = (speciesId: string, iv = 0) => ({
   ...createDragon(pack, speciesId, { now: NOW, rng: () => 0.5 }),
   iv,
@@ -832,7 +847,7 @@ check("high tiers compound in tier 1 dragons", () => {
 });
 
 check("a tier can only be built from the tier below", () => {
-  let save = newGame(pack, NOW);
+  let save = seeded();
   const target = save.dragons[0];
   // Duplicates two tiers down are not eligible fodder for a tier 2 target.
   const t2 = { ...createDragon(pack, target.speciesId, { now: NOW }), tier: 2 };
@@ -948,12 +963,12 @@ check("the value never changes after birth", () => {
 });
 
 check("ivs do not pass down from parents", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const perfect = save.dragons.map((d) => ({ ...d, iv: IV_MAX }));
-  const seeded = { ...save, dragons: perfect, roostCapacity: 9 };
+  const flawless = { ...save, dragons: perfect, roostCapacity: 9 };
   let allPerfect = true;
   for (let i = 0; i < 60; i++) {
-    const bred = startBreeding(pack, seeded, perfect[0].id, perfect[1].id, NOW);
+    const bred = startBreeding(pack, flawless, perfect[0].id, perfect[1].id, NOW);
     const hatched = claimHatchling(pack, bred.save, LATER);
     const child = hatched.save.dragons[hatched.save.dragons.length - 1];
     if (child.iv !== IV_MAX) allPerfect = false;
@@ -962,7 +977,7 @@ check("ivs do not pass down from parents", () => {
 });
 
 check("a dragon whose species was deleted is dropped on load", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const ghost = { ...save.dragons[0], id: "ghost", speciesId: "deleted-dragon" };
   const stale = {
     ...save,
@@ -977,7 +992,7 @@ check("a dragon whose species was deleted is dropped on load", () => {
 });
 
 check("an egg of a deleted dragon is cleared", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const [a, b] = save.dragons;
   const withEgg = {
     ...save,
@@ -993,7 +1008,7 @@ check("an egg of a deleted dragon is cleared", () => {
 });
 
 check("an egg whose parents were dropped is cleared", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const ghost = { ...save.dragons[0], id: "ghost", speciesId: "deleted-dragon" };
   const withEgg = {
     ...save,
@@ -1010,7 +1025,7 @@ check("an egg whose parents were dropped is cleared", () => {
 });
 
 check("a real egg survives migration", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const [a, b] = save.dragons;
   const withEgg = {
     ...save,
@@ -1026,7 +1041,7 @@ check("a real egg survives migration", () => {
 });
 
 check("older saves are repaired rather than dropped", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const legacy = {
     ...save,
     dragons: save.dragons.map((d) => {
@@ -1087,7 +1102,7 @@ check("a dragon with no time set falls back to the default", () => {
 });
 
 check("the egg timer matches the dragon inside it", () => {
-  const save = { ...newGame(pack, NOW), roostCapacity: 9 };
+  const save = { ...seeded(), roostCapacity: 9 };
   const [a, b] = save.dragons;
   const nest = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1).save.breeding!;
   assert.strictEqual(
@@ -1097,7 +1112,7 @@ check("the egg timer matches the dragon inside it", () => {
 });
 
 check("an egg cannot be hatched early", () => {
-  const save = { ...newGame(pack, NOW), roostCapacity: 9 };
+  const save = { ...seeded(), roostCapacity: 9 };
   const [a, b] = save.dragons;
   const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
   const early = claimHatchling(pack, bred.save, NOW + 1000);
@@ -1142,7 +1157,7 @@ check("bakeries outrun perches given enough of each", () => {
 
 console.log("\nBakeries");
 check("an oven starts idle and takes an order", () => {
-  const save = { ...newGame(pack, NOW), coins: 10000 };
+  const save = { ...seeded(), coins: 10000 };
   const built = buildBakery(pack, save, NOW);
   assert.ok(built.ok, built.message);
   const oven = built.save.bakeries[0];
@@ -1153,7 +1168,7 @@ check("an oven starts idle and takes an order", () => {
 });
 
 check("the cheapest order is free", () => {
-  const save = { ...newGame(pack, NOW), coins: 0 };
+  const save = { ...seeded(), coins: 0 };
   const built = buildBakery(pack, { ...save, coins: 10000 }, NOW);
   const broke = { ...built.save, coins: 0 };
   const started = startBatch(pack, broke, broke.bakeries[0].id, "batch-1", NOW);
@@ -1172,7 +1187,7 @@ check("bigger orders cost more, take longer and pay better", () => {
 });
 
 check("an order cannot be collected early, and pays out once done", () => {
-  const built = buildBakery(pack, { ...newGame(pack, NOW), coins: 10000 }, NOW);
+  const built = buildBakery(pack, { ...seeded(), coins: 10000 }, NOW);
   const oven = built.save.bakeries[0];
   const started = startBatch(pack, built.save, oven.id, "batch-1", NOW);
   const early = collectBatch(pack, started.save, oven.id, NOW + 1000);
@@ -1185,16 +1200,81 @@ check("an order cannot be collected early, and pays out once done", () => {
 });
 
 check("a busy oven refuses a second order", () => {
-  const built = buildBakery(pack, { ...newGame(pack, NOW), coins: 10000 }, NOW);
+  const built = buildBakery(pack, { ...seeded(), coins: 10000 }, NOW);
   const oven = built.save.bakeries[0];
   const started = startBatch(pack, built.save, oven.id, "batch-2", NOW);
   const again = startBatch(pack, started.save, oven.id, "batch-1", NOW + 1000);
   assert.ok(!again.ok);
 });
 
+console.log("\nSoftlock guard");
+check("a keeper with no dragons can always afford one", () => {
+  const cheapest = Math.min(
+    ...Object.values(pack.species)
+      .filter((s) => s.marketPrice)
+      .map((s) => s.marketPrice as number),
+  );
+  const broke = { ...newGame(pack, NOW), coins: 0 };
+  const fixed = ensureViable(pack, broke);
+  assert.strictEqual(fixed.coins, cheapest);
+
+  // And it works through the dispatcher, not just when called directly.
+  const acted = applyAction(pack, broke, { type: "collectCoins" }, ctx());
+  assert.ok(acted.save.coins >= cheapest);
+});
+
+check("releasing the last dragon leaves a way back", () => {
+  const save = { ...seeded(["fire-dragon"]), coins: 0 };
+  const released = applyAction(pack, save, { type: "releaseDragon", dragonId: save.dragons[0].id }, ctx());
+  // Releasing your only dragon is refused outright, so this cannot strand you.
+  assert.ok(!released.ok);
+});
+
+check("the guard leaves a going concern alone", () => {
+  const save = { ...seeded(), coins: 3 };
+  assert.strictEqual(ensureViable(pack, save).coins, 3);
+});
+
+check("an egg in the nest counts as a way forward", () => {
+  const save = seeded();
+  const [a, b] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const empty = { ...bred.save, dragons: [], coins: 0 };
+  assert.strictEqual(ensureViable(pack, empty).coins, 0, "an egg is already a way out");
+});
+
+console.log("\nBreeding log");
+check("a hatch is recorded against the pairing", () => {
+  const save = { ...seeded(), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const hatched = applyAction(pack, bred.save, { type: "hatch" }, { ...ctx(), now: LATER });
+  assert.ok(hatched.ok, hatched.message);
+
+  const key = pairKey(a.speciesId, b.speciesId);
+  const row = hatched.save.breedingLog?.[key];
+  assert.ok(row, "nothing was written to the log");
+  assert.strictEqual(Object.values(row!).reduce((n, c) => n + c, 0), 1);
+});
+
+check("the log key does not care about parent order", () => {
+  assert.strictEqual(pairKey("fire-dragon", "water-dragon"), pairKey("water-dragon", "fire-dragon"));
+});
+
+check("repeat hatches accumulate", () => {
+  let save = { ...seeded(), roostCapacity: 20 };
+  const [a, b] = save.dragons;
+  for (let i = 0; i < 5; i++) {
+    save = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, { ...ctx(), rng: () => i / 5 }).save;
+    save = applyAction(pack, save, { type: "hatch" }, { ...ctx(), now: LATER }).save;
+  }
+  const row = save.breedingLog![pairKey(a.speciesId, b.speciesId)];
+  assert.strictEqual(Object.values(row).reduce((n, c) => n + c, 0), 5);
+});
+
 console.log("\nRedaction");
 check("an unknown dragon is not sent to the client", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const shown = redactPack(pack, save, false);
   // Starters and anything on sale are visible; nothing else is.
   for (const id of ["life-dragon", "monster-dragon", "perfection-dragon", "ether-dragon"])
@@ -1203,13 +1283,13 @@ check("an unknown dragon is not sent to the client", () => {
 });
 
 check("the shop stays visible", () => {
-  const shown = redactPack(pack, newGame(pack, NOW), false);
+  const shown = redactPack(pack, seeded(), false);
   for (const s of Object.values(pack.species))
     if (s.marketPrice) assert.ok(shown.species[s.id], `${s.name} vanished from the market`);
 });
 
 check("no breeding rule ever reaches an ordinary player", () => {
-  for (const save of [null, newGame(pack, NOW)]) {
+  for (const save of [null, seeded()]) {
     const shown = redactPack(pack, save, false);
     assert.deepStrictEqual(shown.breedingRules, []);
     assert.deepStrictEqual(shown.balance.startingSpecies, []);
@@ -1217,7 +1297,7 @@ check("no breeding rule ever reaches an ordinary player", () => {
 });
 
 check("undiscovered branches are withheld", () => {
-  const shown = redactPack(pack, newGame(pack, NOW), false);
+  const shown = redactPack(pack, seeded(), false);
   for (const id of ["transcendent", "duality", "physical", "special", "life"])
     assert.ok(!shown.taxa[id], `${id} leaked`);
   // What is left is a valid tree: every parent that survives is present.
@@ -1226,7 +1306,7 @@ check("undiscovered branches are withheld", () => {
 });
 
 check("discovering a dragon reveals its branch and nothing more", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const found = { ...save, discovered: [...save.discovered, "perfection-dragon"] };
   const shown = redactPack(pack, found, false);
   assert.ok(shown.species["perfection-dragon"]);
@@ -1237,29 +1317,27 @@ check("discovering a dragon reveals its branch and nothing more", () => {
 });
 
 check("a designer sees everything", () => {
-  const shown = redactPack(pack, newGame(pack, NOW), true);
+  const shown = redactPack(pack, seeded(), true);
   assert.strictEqual(Object.keys(shown.species).length, Object.keys(pack.species).length);
   assert.strictEqual(shown.breedingRules.length, pack.breedingRules.length);
   assert.ok(shown.complete);
 });
 
 check("progress can still be counted without naming anything", () => {
-  const shown = redactPack(pack, newGame(pack, NOW), false);
+  const shown = redactPack(pack, seeded(), false);
   assert.strictEqual(shown.totalSpecies, Object.keys(pack.species).length);
 });
 
 console.log("\nAction dispatcher");
-const ctx = (isAdmin = false) => ({ now: NOW, rng: () => 0.5, isAdmin });
-
 check("actions run through one dispatcher", () => {
-  const save = { ...newGame(pack, NOW), food: 500 };
+  const save = { ...seeded(), food: 500 };
   const fed = applyAction(pack, save, { type: "feed", dragonId: save.dragons[0].id, amount: 50 }, ctx());
   assert.ok(fed.ok, fed.message);
   assert.strictEqual(fed.save.food, 450);
 });
 
 check("an illegal action is refused and changes nothing", () => {
-  const save = { ...newGame(pack, NOW), food: 0, coins: 0 };
+  const save = { ...seeded(), food: 0, coins: 0 };
   for (const action of [
     { type: "feed" as const, dragonId: save.dragons[0].id, amount: 100 },
     { type: "buySpecies" as const, speciesId: "fire-dragon" },
@@ -1273,7 +1351,7 @@ check("an illegal action is refused and changes nothing", () => {
 });
 
 check("designer actions are refused without admin", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   for (const action of [
     { type: "setAdminMode" as const, on: true },
     { type: "grantDragon" as const, speciesId: "ether-dragon" },
@@ -1294,7 +1372,7 @@ check("designer actions are refused without admin", () => {
 check("a stale admin flag is ignored for a non-designer", () => {
   // A save carrying adminMode from an account that had it, now in the hands of
   // one that does not.
-  const stale = { ...newGame(pack, NOW), adminMode: true, coins: 0, food: 0 };
+  const stale = { ...seeded(), adminMode: true, coins: 0, food: 0 };
 
   const bought = applyAction(pack, stale, { type: "buySpecies", speciesId: "fire-dragon" }, ctx(false));
   assert.ok(!bought.ok, "free purchase went through on a stale flag");
@@ -1310,7 +1388,7 @@ check("a stale admin flag is ignored for a non-designer", () => {
 });
 
 check("a stale flag cannot skip timers or fill the roost", () => {
-  const stale = { ...newGame(pack, NOW), adminMode: true, roostCapacity: 2 };
+  const stale = { ...seeded(), adminMode: true, roostCapacity: 2 };
   const [a, b] = stale.dragons;
   const bred = applyAction(pack, stale, { type: "breed", parentA: a.id, parentB: b.id }, ctx(false));
   assert.ok(!bred.ok, "a full roost should have blocked this");
@@ -1331,7 +1409,7 @@ check("a stale flag cannot skip timers or fill the roost", () => {
 });
 
 check("free text is capped", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const id = save.dragons[0].id;
   const long = "x".repeat(5000);
   const named = applyAction(pack, save, { type: "renameDragon", dragonId: id, nickname: long }, ctx());
@@ -1341,7 +1419,7 @@ check("free text is capped", () => {
 });
 
 check("perches cannot be granted without bound", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const r = applyAction(pack, save, { type: "addPerches", count: 99999 }, ctx(true));
   assert.ok(r.save.roostCapacity - save.roostCapacity <= 100);
 });
@@ -1366,7 +1444,7 @@ check("guests are refused admin, owners are not", () => {
 });
 
 check("admin mode costs nothing only while it is on", () => {
-  const on = { ...newGame(pack, NOW), adminMode: true, coins: 0 };
+  const on = { ...seeded(), adminMode: true, coins: 0 };
   assert.ok(buySpecies(pack, on, "fire-dragon", NOW).ok);
   const off = { ...on, adminMode: false };
   assert.ok(!buySpecies(pack, off, "fire-dragon", NOW).ok);
@@ -1374,7 +1452,7 @@ check("admin mode costs nothing only while it is on", () => {
 
 console.log("\nAdmin mode");
 check("nothing is spent while admin mode is on", () => {
-  const save = { ...newGame(pack, NOW), adminMode: true, coins: 0, food: 0 };
+  const save = { ...seeded(), adminMode: true, coins: 0, food: 0 };
   const built = buildBakery(pack, save, NOW);
   assert.ok(built.ok, built.message);
   assert.strictEqual(built.save.coins, 0);
@@ -1387,13 +1465,13 @@ check("nothing is spent while admin mode is on", () => {
 });
 
 check("the roost never fills in admin mode", () => {
-  const save = { ...newGame(pack, NOW), adminMode: true, roostCapacity: 1 };
+  const save = { ...seeded(), adminMode: true, roostCapacity: 1 };
   const bought = buySpecies(pack, save, "fire-dragon", NOW);
   assert.ok(bought.ok, bought.message);
 });
 
 check("admin mode can skip an egg", () => {
-  const save = { ...newGame(pack, NOW), adminMode: true };
+  const save = { ...seeded(), adminMode: true };
   const [a, b] = save.dragons;
   const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
   const hatched = claimHatchling(pack, bred.save, NOW, () => 0.5);
@@ -1401,7 +1479,7 @@ check("admin mode can skip an egg", () => {
 });
 
 check("costs apply again once admin mode is off", () => {
-  const save = { ...newGame(pack, NOW), adminMode: true, coins: 100 };
+  const save = { ...seeded(), adminMode: true, coins: 100 };
   const off = setAdminMode(save, false).save;
   assert.strictEqual(off.coins, 100);
   const bought = buySpecies(pack, off, "fire-dragon", NOW);
@@ -1409,15 +1487,36 @@ check("costs apply again once admin mode is off", () => {
 });
 
 console.log("\nActions");
-check("a fresh save has starters and discoveries", () => {
+check("a new keeper can afford exactly one Fire Dragon", () => {
   const save = newGame(pack, NOW);
-  assert.strictEqual(save.dragons.length, 2);
-  assert.strictEqual(save.discovered.length, 2);
+  const price = pack.species["fire-dragon"].marketPrice!;
+  assert.strictEqual(save.coins, price);
+
+  const bought = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  assert.ok(bought.ok, bought.message);
+  assert.strictEqual(bought.save.coins, 0);
+
+  // And not two.
+  const again = applyAction(pack, bought.save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  assert.ok(!again.ok);
+});
+
+check("a fresh save starts with nothing but coins", () => {
+  const save = newGame(pack, NOW);
+  assert.deepStrictEqual(save.dragons, []);
+  assert.deepStrictEqual(save.discovered, []);
   assert.strictEqual(save.coins, pack.balance.startingCoins);
+  assert.strictEqual(save.food, pack.balance.startingFood);
+});
+
+check("granting a dragon is the only way to seed one", () => {
+  const save = newGame(pack, NOW);
+  const denied = applyAction(pack, save, { type: "grantDragon", speciesId: "fire-dragon" }, ctx(false));
+  assert.ok(!denied.ok);
 });
 
 check("feeding spends food and grants levels", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const r = feed(pack, { ...save, food: 500 }, save.dragons[0].id, 50);
   assert.ok(r.ok, r.message);
   assert.strictEqual(r.save.food, 450);
@@ -1425,14 +1524,14 @@ check("feeding spends food and grants levels", () => {
 });
 
 check("feeding without food is refused", () => {
-  const save = { ...newGame(pack, NOW), food: 0 };
+  const save = { ...seeded(), food: 0 };
   const r = feed(pack, save, save.dragons[0].id, 1);
   assert.ok(!r.ok);
   assert.match(r.message, /Not enough food/);
 });
 
 check("feeding to the next level lands exactly one level up", () => {
-  const save = { ...newGame(pack, NOW), food: 100000 };
+  const save = { ...seeded(), food: 100000 };
   const target = save.dragons[0];
   const needed = foodToNextLevel(pack, target)!;
   const r = feedToNextLevel(pack, save, target.id);
@@ -1443,7 +1542,7 @@ check("feeding to the next level lands exactly one level up", () => {
 });
 
 check("short of a level, it feeds everything it can", () => {
-  const start = newGame(pack, NOW);
+  const start = seeded();
   const target = start.dragons[0];
   const needed = foodToNextLevel(pack, target)!;
   const save = { ...start, food: needed - 1 };
@@ -1457,7 +1556,7 @@ check("short of a level, it feeds everything it can", () => {
 });
 
 check("a maxed dragon cannot be fed", () => {
-  const start = newGame(pack, NOW);
+  const start = seeded();
   const maxed = { ...start.dragons[0], level: pack.balance.maxLevel };
   const save = { ...start, food: 1000, dragons: [maxed, start.dragons[1]] };
   assert.strictEqual(foodToNextLevel(pack, maxed), null);
@@ -1468,9 +1567,8 @@ check("a maxed dragon cannot be fed", () => {
 
 check("a high growth IV makes food go further", () => {
   const tuned = { ...pack, iv: { ...pack.iv, growthMagnitude: 0.5 } };
-  const start = newGame(tuned, NOW);
-  const dull = { ...start.dragons[0], iv: 0 };
-  const sharp = { ...start.dragons[0], iv: 31 };
+  const dull = { ...make("fire-dragon"), iv: 0 };
+  const sharp = { ...make("fire-dragon"), iv: 31 };
   assert.ok(foodToNextLevel(tuned, sharp)! < foodToNextLevel(tuned, dull)!);
 });
 
@@ -1480,7 +1578,7 @@ check("every bakery order yields a different amount of food", () => {
 });
 
 check("breeding then hatching adds a dragon", () => {
-  const save = newGame(pack, NOW);
+  const save = seeded();
   const [a, b] = save.dragons;
   const bred = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
   assert.ok(bred.ok, bred.message);
@@ -1491,7 +1589,7 @@ check("breeding then hatching adds a dragon", () => {
 });
 
 check("a full roost blocks breeding", () => {
-  const save = { ...newGame(pack, NOW), roostCapacity: 2 };
+  const save = { ...seeded(), roostCapacity: 2 };
   const [a, b] = save.dragons;
   const r = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
   assert.ok(!r.ok);
@@ -1499,7 +1597,7 @@ check("a full roost blocks breeding", () => {
 });
 
 check("merging consumes exactly the required duplicates", () => {
-  let save = newGame(pack, NOW);
+  let save = seeded();
   const target = save.dragons[0];
   const cost = mergeCost(pack, target)!;
   for (let i = 0; i < cost; i++) {
@@ -1513,7 +1611,7 @@ check("merging consumes exactly the required duplicates", () => {
 });
 
 check("merging eats the weakest duplicates first", () => {
-  let save = newGame(pack, NOW);
+  let save = seeded();
   const target = { ...save.dragons[0], iv: 5 };
   save = { ...save, dragons: [target, save.dragons[1]] };
   const strong = { ...make(target.speciesId, IV_MAX), id: "keep-me" };
@@ -1527,7 +1625,7 @@ check("merging eats the weakest duplicates first", () => {
 });
 
 check("locked duplicates are never eaten", () => {
-  let save = newGame(pack, NOW);
+  let save = seeded();
   const target = save.dragons[0];
   const cost = mergeCost(pack, target)!;
   for (let i = 0; i < cost; i++) {
@@ -1539,7 +1637,7 @@ check("locked duplicates are never eaten", () => {
 });
 
 check("merging across different tiers is refused", () => {
-  let save = newGame(pack, NOW);
+  let save = seeded();
   const target = save.dragons[0];
   save = { ...save, dragons: [...save.dragons, { ...make(target.speciesId), tier: 2 }] };
   assert.ok(!merge(pack, save, target.id).ok);

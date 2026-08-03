@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 22,
+  "version": 25,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -605,12 +605,9 @@
     }
   ],
   "balance": {
-    "startingCoins": 5400,
+    "startingCoins": 2250,
     "startingFood": 60,
-    "startingSpecies": [
-      "fire-dragon",
-      "earth-dragon"
-    ],
+    "startingSpecies": [],
     "roostCapacity": 6,
     "roostSlotCost": 7200,
     "roostSlotCostExponent": 2,
@@ -631,7 +628,7 @@
       5
     ],
     "maxTier": 5,
-    "levelXpBase": 50,
+    "levelXpBase": 20,
     "levelXpExponent": 1.45,
     "maxLevel": 40,
     "parentWeight": 50,
@@ -690,7 +687,7 @@
         "food": 120000
       }
     ],
-    "xpPerFood": 2.5
+    "xpPerFood": 1
   },
   "custom": {}
 }

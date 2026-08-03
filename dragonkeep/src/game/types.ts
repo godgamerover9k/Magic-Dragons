@@ -300,6 +300,8 @@ export interface Bakery {
 export interface BreedingSlot {
   parentA: string;
   parentB: string;
+  /** Recorded at nesting, so the log survives a parent being released. */
+  parentSpecies?: [SpeciesId, SpeciesId];
   startedAt: number;
   readyAt: number;
   resultSpeciesId: SpeciesId;
@@ -326,6 +328,11 @@ export interface SaveGame {
   adminMode: boolean;
   /** Every species ever owned — drives the Codex and rule conditions. */
   discovered: SpeciesId[];
+  /**
+   * What each pairing has produced, keyed by the two parent species sorted and
+   * joined. Only ever written from hatches the player actually saw.
+   */
+  breedingLog?: Record<string, Record<SpeciesId, number>>;
 
   custom: Record<string, unknown>;
 }

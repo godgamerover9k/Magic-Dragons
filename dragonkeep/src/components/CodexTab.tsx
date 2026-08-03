@@ -20,8 +20,11 @@ export function CodexTab({ game }: { game: Game }) {
 
   if (!save) return null;
 
-  const all = Object.values(pack.species);
-  const found = all.filter((s) => save.discovered.includes(s.id)).length;
+  const visible = Object.values(pack.species);
+  const found = visible.filter((s) => save.discovered.includes(s.id)).length;
+  // The pack the client holds is cut down to what has been unlocked, so the
+  // total has to come from the server rather than from counting what is here.
+  const total = (pack as { totalSpecies?: number }).totalSpecies ?? visible.length;
 
   const toggle = (id: string) =>
     setOpen((current) => {
@@ -40,7 +43,7 @@ export function CodexTab({ game }: { game: Game }) {
         label="Codex"
         aside={
           <span className="num text-xs text-muted">
-            {found}/{all.length} recorded
+            {found}/{total} recorded
           </span>
         }
       />

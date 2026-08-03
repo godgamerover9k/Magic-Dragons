@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { buildPool } from "@/game/breeding";
-import { colorOf, formatDuration } from "@/game/economy";
-import { nameOf } from "@/game/engine";
+import { colorOf, formatDuration, formatNumber } from "@/game/economy";
+import { nameOf, pairKey } from "@/game/engine";
 import { HatchOverlay, type Hatched } from "./HatchOverlay";
 import { taxonPath } from "@/game/taxonomy";
 import type { Dragon } from "@/game/types";
@@ -143,9 +143,7 @@ export function BreedTab({ game }: { game: Game }) {
       )}
 
       {parentA && parentB && !save.adminMode && (
-        <p className="rounded border border-line bg-panel px-3 py-2 text-[11px] text-muted">
-          What comes of a pairing is only known once the egg hatches.
-        </p>
+        <PastResults game={game} a={parentA.speciesId} b={parentB.speciesId} />
       )}
 
       <Button
@@ -234,6 +232,60 @@ function Slot({
       ) : (
         <p className="mt-1 text-sm text-muted">Pick one below</p>
       )}
+    </Panel>
+  );
+}
+
+/**
+ * What this pairing has produced before, for this player. Nothing here is told
+ * to them — it is only what they have already watched hatch, counted up. Two
+ * keepers comparing notes is how a combo gets found.
+ */
+function PastResults({ game, a, b }: { game: Game; a: string; b: string }) {
+  const { pack, save } = game;
+  const row = save?.breedingLog?.[pairKey(a, b)];
+  const entries = Object.entries(row ?? {})
+    .filter(([id]) => pack.species[id])
+    .sort((x, y) => y[1] - x[1]);
+  const total = entries.reduce((n, [, count]) => n + count, 0);
+
+  if (total === 0)
+    return (
+      <p className="rounded border border-line bg-panel px-3 py-2 text-[11px] text-muted">
+        You have not bred this pair before. What comes of it is only known once the egg
+        hatches.
+      </p>
+    );
+
+  return (
+    <Panel className="p-3">
+      <p className="eyebrow mb-2">
+        Bred {total} {total === 1 ? "time" : "times"} before
+      </p>
+      <ul className="space-y-1.5">
+        {entries.map(([id, count]) => {
+          const share = (count / total) * 100;
+          return (
+            <li key={id}>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="truncate">{pack.species[id].name}</span>
+                <span className="num shrink-0 text-xs text-muted">
+                  {formatNumber(count)} · {share < 1 ? share.toFixed(1) : Math.round(share)}%
+                </span>
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-line">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${share}%`, background: colorOf(pack, id) }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 border-t border-line pt-2 text-[11px] text-muted">
+        Your own results only. A small number of tries says very little about the odds.
+      </p>
     </Panel>
   );
 }

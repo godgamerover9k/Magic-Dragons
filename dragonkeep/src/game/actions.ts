@@ -21,6 +21,7 @@ import {
   updateDragon,
   type ActionResult,
 } from "./engine";
+import { ensureViable } from "./engine";
 import type { ContentPack, SaveGame } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -104,52 +105,55 @@ export function applyAction(
   action: Action,
   ctx: ActionContext,
 ): ActionResult {
-  const save = withAdminChecked(rawSave, ctx.isAdmin);
+  const save = ensureViable(pack, withAdminChecked(rawSave, ctx.isAdmin));
 
   if (ADMIN_ACTIONS.has(action.type) && !ctx.isAdmin)
     return fail(save, "That is not available on this account.");
 
   const { now, rng } = ctx;
 
+  const done = (result: ActionResult): ActionResult =>
+    result.ok ? { ...result, save: ensureViable(pack, result.save) } : result;
+
   switch (action.type) {
     case "collectCoins":
-      return collectAllCoins(pack, save, now);
+      return done(collectAllCoins(pack, save, now));
 
     case "feed":
-      return feed(pack, save, action.dragonId, action.amount);
+      return done(feed(pack, save, action.dragonId, action.amount));
 
     case "feedToNextLevel":
-      return feedToNextLevel(pack, save, action.dragonId);
+      return done(feedToNextLevel(pack, save, action.dragonId));
 
     case "breed":
-      return startBreeding(pack, save, action.parentA, action.parentB, now, rng);
+      return done(startBreeding(pack, save, action.parentA, action.parentB, now, rng));
 
     case "hatch":
-      return claimHatchling(pack, save, now, rng);
+      return done(claimHatchling(pack, save, now, rng));
 
     case "cancelBreeding":
-      return cancelBreeding(save);
+      return done(cancelBreeding(save));
 
     case "merge":
-      return merge(pack, save, action.dragonId);
+      return done(merge(pack, save, action.dragonId));
 
     case "buySpecies":
-      return buySpecies(pack, save, action.speciesId, now, rng);
+      return done(buySpecies(pack, save, action.speciesId, now, rng));
 
     case "buyRoostSlot":
-      return buyRoostSlot(pack, save);
+      return done(buyRoostSlot(pack, save));
 
     case "buildBakery":
-      return buildBakery(pack, save, now);
+      return done(buildBakery(pack, save, now));
 
     case "startBatch":
-      return startBatch(pack, save, action.bakeryId, action.batchId, now);
+      return done(startBatch(pack, save, action.bakeryId, action.batchId, now));
 
     case "collectBatch":
-      return collectBatch(pack, save, action.bakeryId, now);
+      return done(collectBatch(pack, save, action.bakeryId, now));
 
     case "collectAllBatches":
-      return collectAllBatches(pack, save, now);
+      return done(collectAllBatches(pack, save, now));
 
     case "renameDragon": {
       const nickname = action.nickname?.slice(0, NICKNAME_MAX).trim() || null;
@@ -165,7 +169,7 @@ export function applyAction(
       return updateDragon(save, action.dragonId, { locked: Boolean(action.locked) });
 
     case "releaseDragon":
-      return releaseDragon(pack, save, action.dragonId);
+      return done(releaseDragon(pack, save, action.dragonId));
 
     case "restart":
       return { save: newGame(pack, now), ok: true, message: "New keeper started." };
@@ -173,16 +177,16 @@ export function applyAction(
     // --- Admin ---------------------------------------------------------------
 
     case "setAdminMode":
-      return setAdminMode(save, action.on);
+      return done(setAdminMode(save, action.on));
 
     case "grantDragon":
-      return grantDragon(pack, save, action.speciesId, now);
+      return done(grantDragon(pack, save, action.speciesId, now));
 
     case "skipIncubation":
-      return skipIncubation(save, now);
+      return done(skipIncubation(save, now));
 
     case "skipBaking":
-      return skipBaking(save, action.bakeryId, now);
+      return done(skipBaking(save, action.bakeryId, now));
 
     case "addPerches": {
       const count = Math.min(Math.max(Math.floor(action.count), 1), 100);

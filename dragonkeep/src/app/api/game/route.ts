@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyAction, withAdminChecked, type Action } from "@/game/actions";
 import { defaultContentPack } from "@/game/content";
-import { newGame, settle } from "@/game/engine";
+import { ensureViable, newGame, settle } from "@/game/engine";
 import { redactPack } from "@/game/redact";
 import { migrateSave } from "@/game/storage";
 import type { SaveGame } from "@/game/types";
@@ -80,9 +80,9 @@ export async function POST(request: Request) {
   // Elapsed time is folded in from the stored timestamps, so a client cannot
   // claim to have been away longer than it was.
   const isAdmin = isAdminEmail(user.email);
-  const current = withAdminChecked(
-    settle(pack, await loadSave(user.id, pack), now),
-    isAdmin,
+  const current = ensureViable(
+    pack,
+    withAdminChecked(settle(pack, await loadSave(user.id, pack), now), isAdmin),
   );
 
   const result = applyAction(pack, current, action, { now, rng: secureRandom, isAdmin });
@@ -136,9 +136,9 @@ export async function GET(request: Request) {
     });
 
   const isAdmin = isAdminEmail(user.email);
-  const save = withAdminChecked(
-    settle(pack, await loadSave(user.id, pack), Date.now()),
-    isAdmin,
+  const save = ensureViable(
+    pack,
+    withAdminChecked(settle(pack, await loadSave(user.id, pack), Date.now()), isAdmin),
   );
   await storeSave(user.id, save);
 

@@ -26,13 +26,28 @@ type Tab = (typeof ALL_TABS)[number];
 export default function Page() {
   const game = useGame();
   const [tab, setTab] = useState<Tab>("Roost");
-  const { pack, save, isAdmin, now, ready, toasts, act } = game;
+  const { pack, save, account, isAdmin, cloudEnabled, connected, now, ready, toasts, act } = game;
 
   const showAdmin = isAdmin;
   const tabs = ALL_TABS.filter((t) => t !== "Admin" || showAdmin);
   // Signing out of an owner account while sitting on Admin should not strand you
   // on a blank tab.
   const active: Tab = tab === "Admin" && !showAdmin ? "Roost" : tab;
+
+  // Accounts exist and nobody is signed in — not even as a guest. There is no
+  // game to show yet, so the account screen IS the page.
+  if (ready && cloudEnabled && !account) {
+    return (
+      <main className="mx-auto min-h-dvh max-w-md px-4 py-10">
+        <div className="mb-6 flex items-baseline gap-2">
+          <h1 className="font-display text-2xl leading-none tracking-tight">Dragonkeep</h1>
+          <ConnectionDot connected={connected} />
+        </div>
+        <AccountTab game={game} />
+        <Toasts toasts={toasts} />
+      </main>
+    );
+  }
 
   if (!ready || !save) {
     return (
@@ -114,20 +129,46 @@ export default function Page() {
         {active === "Admin" && showAdmin && <AdminTab game={game} />}
       </div>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-1.5 px-4">
-        {toasts.map((toast) => (
-          <p
-            key={toast.id}
-            className={`max-w-md rounded-full border px-4 py-2 text-center text-xs backdrop-blur ${
-              toast.ok
-                ? "border-verdigris/50 bg-verdigris/15 text-verdigris"
-                : "border-warn/50 bg-warn/15 text-warn"
-            }`}
-          >
-            {toast.text}
-          </p>
-        ))}
-      </div>
+      <Toasts toasts={toasts} />
     </main>
+  );
+}
+
+function ConnectionDot({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1.5"
+      title={connected ? "Connected to the server" : "No connection to the server"}
+    >
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full"
+        style={{
+          background: connected ? "var(--color-verdigris)" : "var(--color-warn)",
+        }}
+      />
+      <span className="eyebrow" style={{ color: connected ? undefined : "var(--color-warn)" }}>
+        {connected ? "connected" : "offline"}
+      </span>
+    </span>
+  );
+}
+
+function Toasts({ toasts }: { toasts: { id: number; text: string; ok: boolean }[] }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-1.5 px-4">
+      {toasts.map((toast) => (
+        <p
+          key={toast.id}
+          className={`max-w-md rounded-full border px-4 py-2 text-center text-xs backdrop-blur ${
+            toast.ok
+              ? "border-verdigris/50 bg-verdigris/15 text-verdigris"
+              : "border-warn/50 bg-warn/15 text-warn"
+          }`}
+        >
+          {toast.text}
+        </p>
+      ))}
+    </div>
   );
 }

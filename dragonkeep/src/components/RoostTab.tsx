@@ -118,6 +118,7 @@ function DragonCard({
   onToggle: () => void;
 }) {
   const { pack, save, now, act } = game;
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const species = speciesOf(pack, dragon);
   const color = colorOf(pack, dragon.speciesId);
   if (!save || !species) return null;
@@ -250,7 +251,7 @@ function DragonCard({
               </Button>
               <Button
                 variant="danger"
-                onClick={() => act({ type: "releaseDragon", dragonId: dragon.id })}
+                onClick={() => setConfirmRelease(true)}
                 disabled={dragon.locked}
               >
                 Release
@@ -280,6 +281,32 @@ function DragonCard({
               />
             </label>
           </div>
+
+          {confirmRelease && (
+            <div className="rounded border border-warn/50 bg-warn/10 p-3">
+              <p className="font-display text-sm">
+                Release {nameOf(pack, dragon)}?
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-muted">
+                It leaves the roost for good — its tier, its level and its{" "}
+                {pack.iv.name.toLowerCase()} of {dragon.iv} go with it. You get{" "}
+                <span className="num">{formatNumber(Math.round(cap * 0.5))}</span> coins
+                back. This cannot be undone.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setConfirmRelease(false);
+                    act({ type: "releaseDragon", dragonId: dragon.id });
+                  }}
+                >
+                  Yes, release it
+                </Button>
+                <Button onClick={() => setConfirmRelease(false)}>Keep it</Button>
+              </div>
+            </div>
+          )}
 
           <p className="text-[11px] text-muted">{species.description}</p>
         </div>

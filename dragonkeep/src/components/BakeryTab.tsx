@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   batchById,
   formatDuration,
@@ -13,7 +15,7 @@ import {
 } from "@/game/engine";
 import type { Bakery } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Bar, Button, Empty, Panel, SectionHeading } from "./ui";
+import { Bar, Button, Empty, Field, Panel, SectionHeading } from "./ui";
 
 export function BakeryTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
@@ -79,51 +81,49 @@ export function BakeryTab({ game }: { game: Game }) {
 
 function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }) {
   const { pack, save, now, act } = game;
+  const [selected, setSelected] = useState(pack.balance.foodBatches[0]?.id ?? "");
   if (!save) return null;
 
   const state = ovenState(oven, now);
   const batch = batchById(pack, oven.batchId);
 
   if (state === "idle") {
+    const chosen = batchById(pack, selected) ?? pack.balance.foodBatches[0] ?? null;
+    const affordable = chosen ? canAfford(save, chosen.coinCost) : false;
+
     return (
       <Panel className="p-3">
         <p className="font-display text-base leading-tight">Oven {index + 1}</p>
-        <p className="eyebrow mt-0.5">Idle — choose an order</p>
-        <div className="mt-2.5 space-y-1.5">
-          {pack.balance.foodBatches.map((option) => {
-            const affordable = canAfford(save, option.coinCost);
-            const perMinute = option.food / (option.seconds / 60);
-            return (
-              <button
-                key={option.id}
-                type="button"
-                disabled={!affordable}
-                onClick={() =>
-                  act({ type: "startBatch", bakeryId: oven.id, batchId: option.id })
-                }
-                className="flex w-full items-center gap-3 rounded border border-line px-3 py-2 text-left transition-colors enabled:hover:border-verdigris disabled:opacity-35"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{option.name}</span>
-                  <span className="num block text-[11px] text-muted">
-                    {option.coinCost === 0
-                      ? "free"
-                      : `${formatNumber(option.coinCost)} coins`}{" "}
-                    · {formatDuration(option.seconds * 1000)}
-                  </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="num block text-sm text-verdigris">
-                    +{formatNumber(option.food)}
-                  </span>
-                  <span className="num block text-[10px] text-muted">
-                    {perMinute.toFixed(1)}/min
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+        <p className="eyebrow mt-0.5">Idle</p>
+
+        <div className="mt-2.5">
+          <Field label="Order">
+            <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+              {pack.balance.foodBatches.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name} — {option.coinCost === 0 ? "free" : `${formatNumber(option.coinCost)} coins`}
+                  {" · "}
+                  {formatDuration(option.seconds * 1000)} · +{formatNumber(option.food)} food
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
+
+        {chosen && (
+          <div className="mt-2 flex items-baseline justify-between gap-3">
+            <p className="num text-[11px] text-muted">
+              {(chosen.food / (chosen.seconds / 60)).toFixed(1)} food per minute
+            </p>
+            <Button
+              variant="solid"
+              disabled={!affordable}
+              onClick={() => act({ type: "startBatch", bakeryId: oven.id, batchId: chosen.id })}
+            >
+              {affordable ? "Start baking" : "Not enough coins"}
+            </Button>
+          </div>
+        )}
       </Panel>
     );
   }

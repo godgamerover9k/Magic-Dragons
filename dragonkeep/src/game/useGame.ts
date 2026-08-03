@@ -36,6 +36,8 @@ export function useGame() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Whether the last thing we asked the server actually got there.
+  const [connected, setConnected] = useState(true);
   const toastId = useRef(0);
 
   const remote = Boolean(account);
@@ -54,7 +56,13 @@ export function useGame() {
 
     // Signed in: the server holds the save and sent it.
     if (acct && server.save)
-      return { loadedPack, acct, save: server.save, serverAdmin: server.isAdmin };
+      return {
+        loadedPack,
+        acct,
+        save: server.save,
+        serverAdmin: server.isAdmin,
+        reachable: server.reachable,
+      };
 
     // Local play, or signed out. The save lives in this browser, but the pack
     // still came from the server.
@@ -65,6 +73,7 @@ export function useGame() {
       acct,
       save: settle(loadedPack, chosen),
       serverAdmin: server.isAdmin,
+      reachable: server.reachable,
     };
   }, []);
 
@@ -77,6 +86,7 @@ export function useGame() {
       setAccount(result.acct);
       setIsAdmin(result.serverAdmin);
       setSave(result.save);
+      setConnected(result.reachable);
       setReady(true);
     })();
     return () => {
@@ -95,6 +105,7 @@ export function useGame() {
       setAccount(result.acct);
       setIsAdmin(result.serverAdmin);
       setSave(result.save);
+      setConnected(result.reachable);
     });
     return () => data.subscription.unsubscribe();
   }, [boot]);
@@ -103,6 +114,18 @@ export function useGame() {
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  // The browser knows about its own connection before any request fails.
+  useEffect(() => {
+    const drop = () => setConnected(false);
+    const restore = () => setConnected(true);
+    window.addEventListener("offline", drop);
+    window.addEventListener("online", restore);
+    return () => {
+      window.removeEventListener("offline", drop);
+      window.removeEventListener("online", restore);
+    };
   }, []);
 
   // Local play persists to the browser. Signed in, the server already has it.
@@ -123,6 +146,7 @@ export function useGame() {
         setBusy(true);
         const result = await sendAction(action);
         setBusy(false);
+        setConnected(!result.offline);
         if (result.save) setSave(result.save);
         // Discovering something widens what the server is willing to send.
         if (result.pack) setPack(result.pack);
@@ -154,7 +178,11 @@ export function useGame() {
     setAccount(result.acct);
     setIsAdmin(result.serverAdmin);
     setSave(result.save);
-    notify("Reloaded from the server.");
+    setConnected(result.reachable);
+    notify(
+      result.reachable ? "Reloaded from the server." : "Could not reach the server.",
+      result.reachable,
+    );
   }, [boot, notify]);
 
   return useMemo(
@@ -167,6 +195,7 @@ export function useGame() {
       cloudEnabled,
       remote,
       busy,
+      connected,
       now,
       ready,
       toasts,
@@ -174,7 +203,7 @@ export function useGame() {
       act,
       reload,
     }),
-    [pack, save, account, isAdmin, remote, busy, now, ready, toasts, notify, act, reload],
+    [pack, save, account, isAdmin, remote, busy, connected, now, ready, toasts, notify, act, reload],
   );
 }
 

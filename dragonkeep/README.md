@@ -263,8 +263,8 @@ On a dragon card, **+1 / +10 / +100** feed fixed amounts and **To next level**
 feeds exactly enough to level up. If there is not enough food for that, it feeds
 everything available instead of refusing, and says how far short it fell.
 
-A dragon's growth IV makes its food go further, so the amount needed is
-per-dragon rather than a flat table.
+One unit of food is one point of experience. A dragon's growth IV would make
+food go further, but its magnitude is 0, so the two numbers are the same today.
 
 ## Coin storage
 
@@ -281,6 +281,23 @@ production. Raising a dragon increases what it earns per hour, but increases wha
 it can hold by more, so the gap between collections gets longer rather than
 shorter. Tuned with `capacity.levelCoefficient`, `capacity.levelExponent` and
 `capacity.tierMultiplier`.
+
+## Never stuck
+
+A keeper with no dragons and not enough coins to buy one has no way forward -
+coins come from dragons. Any save in that state has its purse topped up to the
+cheapest dragon on sale. It runs on load and after every action, so it cannot be
+reached by any route. An egg in the nest counts as a way forward and is left
+alone.
+
+## Signing in
+
+With Supabase configured there is no anonymous play: the account screen IS the
+page until someone signs in, as a guest or otherwise. A connection indicator sits
+next to the title, red when the server cannot be reached.
+
+A new keeper starts with no dragons at all and exactly enough coins for one Fire
+Dragon. The first purchase is the first dragon.
 
 ## Who decides what happens
 
