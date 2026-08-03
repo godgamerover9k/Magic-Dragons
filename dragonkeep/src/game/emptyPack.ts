@@ -39,6 +39,7 @@ export const EMPTY_PACK: RedactedPack = {
     xpPerFood: 1,
     parentWeight: 1,
     defaultIncubationSeconds: 0,
+    marketCooldownSeconds: 0,
     maxBakeries: 0,
     firstBakeryCost: 0,
     bakeryCost: 0,

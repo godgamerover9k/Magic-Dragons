@@ -13,9 +13,9 @@ import {
 import {
   canAfford,
 } from "@/game/engine";
-import type { Bakery } from "@/game/types";
+import type { Bakery, FoodBatch } from "@/game/types";
 import type { Game } from "@/game/useGame";
-import { Bar, Button, Empty, Field, Panel, SectionHeading } from "./ui";
+import { Bar, Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function BakeryTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
@@ -94,6 +94,7 @@ export function BakeryTab({ game }: { game: Game }) {
 function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }) {
   const { pack, save, now, act } = game;
   const [selected, setSelected] = useState(pack.balance.foodBatches[0]?.id ?? "");
+  const [open, setOpen] = useState(false);
   if (!save) return null;
 
   const state = ovenState(oven, now);
@@ -109,21 +110,59 @@ function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }
         <p className="eyebrow mt-0.5">Idle</p>
 
         <div className="mt-2.5">
-          <Field label="Order">
-            <select value={selected} onChange={(e) => setSelected(e.target.value)}>
-              {pack.balance.foodBatches.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name} — {option.coinCost === 0 ? "free" : `${formatNumber(option.coinCost)} coins`}
-                  {" · "}
-                  {formatDuration(option.seconds * 1000)} · +{formatNumber(option.food)} food
-                </option>
-              ))}
-            </select>
-          </Field>
+          <p className="eyebrow mb-1.5">Order</p>
+
+          {/* A native select renders its options as a single cramped line and
+              ignores most styling, so the list is drawn here instead. */}
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            className="flex w-full items-center gap-3 rounded border border-line px-3 py-2.5 text-left"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{chosen?.name ?? "No orders"}</span>
+              {chosen && <span className="block"><OrderDetail batch={chosen} /></span>}
+            </span>
+            <span className="shrink-0 text-xs text-muted" aria-hidden="true">
+              {open ? "▴" : "▾"}
+            </span>
+          </button>
+
+          {open && (
+            <ul className="mt-1.5 overflow-hidden rounded border border-line">
+              {pack.balance.foodBatches.map((option) => {
+                const canPay = canAfford(save, option.coinCost);
+                const active = option.id === chosen?.id;
+                return (
+                  <li key={option.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(option.id);
+                        setOpen(false);
+                      }}
+                      className={`w-full border-b border-line/60 px-3 py-2.5 text-left last:border-b-0 ${
+                        active ? "bg-verdigris/10" : ""
+                      } ${canPay ? "" : "opacity-40"}`}
+                    >
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="truncate text-sm">{option.name}</span>
+                        <span className="num shrink-0 text-xs text-verdigris">
+                          +{formatNumber(option.food)}
+                        </span>
+                      </span>
+                      <OrderDetail batch={option} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
-        {chosen && (
-          <div className="mt-2 flex items-baseline justify-between gap-3">
+        {chosen && !open && (
+          <div className="mt-3 flex items-baseline justify-between gap-3">
             <p className="num text-[11px] text-muted">
               {(chosen.food / (chosen.seconds / 60)).toFixed(1)} food per minute
             </p>
@@ -174,5 +213,16 @@ function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }
         )}
       </div>
     </Panel>
+  );
+}
+
+/** The three numbers that decide an order, on their own line and aligned. */
+function OrderDetail({ batch }: { batch: FoodBatch }) {
+  return (
+    <span className="num mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted">
+      <span>{batch.coinCost === 0 ? "free" : `${formatNumber(batch.coinCost)} coins`}</span>
+      <span>{formatDuration(batch.seconds * 1000)}</span>
+      <span>{(batch.food / (batch.seconds / 60)).toFixed(1)}/min</span>
+    </span>
   );
 }

@@ -6,7 +6,9 @@ import {
   eligibleFodder,
   foodToNextLevel,
   grantXp,
+  formatDuration,
   incubationSeconds,
+  marketCooldownLeft,
   mergeCost,
   nextBakeryCost,
   nextRoostSlotCost,
@@ -419,6 +421,16 @@ export function buySpecies(
   if (!canAfford(save, species.marketPrice))
     return fail(save, `Costs ${species.marketPrice.toLocaleString()} coins.`);
 
+  // One of each kind a day. Coins should not be able to buy a collection.
+  if (!save.adminMode) {
+    const wait = marketCooldownLeft(pack, save, speciesId, now);
+    if (wait > 0)
+      return fail(
+        save,
+        `${species.name} has already been bought today — ${formatDuration(wait)} to go.`,
+      );
+  }
+
   const dragon = { ...createDragon(pack, speciesId, { now, rng }), stored: perchesFull(save) };
   const isNew = !save.discovered.includes(speciesId);
   return {
@@ -426,6 +438,7 @@ export function buySpecies(
       ...spend(save, species.marketPrice),
       dragons: [...save.dragons, dragon],
       discovered: isNew ? [...save.discovered, speciesId] : save.discovered,
+      marketPurchases: { ...(save.marketPurchases ?? {}), [speciesId]: now },
     },
     ok: true,
     message: dragon.stored

@@ -10,7 +10,7 @@ import { LeaderboardTab } from "@/components/LeaderboardTab";
 import { MarketTab } from "@/components/MarketTab";
 import { RoostTab } from "@/components/RoostTab";
 import { Button } from "@/components/ui";
-import { formatNumber, pendingCoins, readyFood } from "@/game/economy";
+import { formatNumber, ovenState, pendingCoins, readyFood } from "@/game/economy";
 import { useGame } from "@/game/useGame";
 
 const ALL_TABS = [
@@ -62,6 +62,10 @@ export default function Page() {
   const banked = save.dragons.reduce((n, d) => n + pendingCoins(pack, d, now), 0);
   const foodWaiting = readyFood(pack, save, now);
 
+  // An oven sitting idle, or one holding food nobody has collected, is an oven
+  // earning nothing. Worth a mark on the tab rather than a trip to check.
+  const ovenNeedsYou = save.bakeries.some((oven) => ovenState(oven, now) !== "baking");
+
   return (
     <main className="mx-auto min-h-dvh max-w-2xl overflow-x-hidden pb-24">
       <header className="sticky top-0 z-20 border-b border-line bg-ink/95 backdrop-blur">
@@ -69,7 +73,7 @@ export default function Page() {
           <h1 className="shrink-0 font-display text-lg leading-none tracking-tight">
             Dragonkeep
           </h1>
-          <p className="eyebrow min-w-0 truncate">{pack.name}</p>
+          <ConnectionDot connected={connected} />
         </div>
 
         <div className="flex items-center gap-4 px-4 py-2.5">
@@ -116,6 +120,14 @@ export default function Page() {
               aria-current={active === t ? "page" : undefined}
             >
               {t}
+              {t === "Bakery" && ovenNeedsYou && (
+                <span
+                  aria-label="An oven is not working"
+                  title="An oven is idle or waiting to be collected"
+                  className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                  style={{ background: "var(--color-warn)" }}
+                />
+              )}
             </button>
           ))}
         </nav>

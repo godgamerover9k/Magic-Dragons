@@ -1,29 +1,32 @@
 "use client";
 
-import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
+import {
+  colorOf,
+  formatDuration,
+  formatNumber,
+  marketCooldownLeft,
+} from "@/game/economy";
 import { taxonPath } from "@/game/taxonomy";
 import type { Game } from "@/game/useGame";
 import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function MarketTab({ game }: { game: Game }) {
-  const { pack, save, act } = game;
+  const { pack, save, now, act } = game;
   if (!save) return null;
 
   const forSale = Object.values(pack.species)
     .filter((s) => s.marketPrice && s.marketPrice > 0 && s.obtainable)
     .sort((a, b) => (a.marketPrice ?? 0) - (b.marketPrice ?? 0));
 
-  const full = save.dragons.length >= save.roostCapacity;
 
   return (
     <div className="space-y-3">
       <SectionHeading label="Market" />
 
-      {full && (
-        <p className="rounded border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-          The roost is full. Add a perch or release a dragon before buying.
-        </p>
-      )}
+      <p className="px-1 text-[11px] text-muted">
+        Each dragon can be bought twice a day. With every perch taken, a purchase goes to
+        storage rather than being refused.
+      </p>
 
       {forSale.length === 0 && (
         <Empty
@@ -35,6 +38,7 @@ export function MarketTab({ game }: { game: Game }) {
       {forSale.map((species) => {
 
         const owned = save.dragons.filter((d) => d.speciesId === species.id).length;
+        const wait = save.adminMode ? 0 : marketCooldownLeft(pack, save, species.id, now);
         return (
           <Panel key={species.id} className="p-3">
             <div className="flex items-start justify-between gap-3">
@@ -46,19 +50,26 @@ export function MarketTab({ game }: { game: Game }) {
               </div>
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: colorOf(pack, species.id) }} />
             </div>
-            <p className="mt-2 text-xs text-muted">{species.description}</p>
+            {species.description && (
+              <p className="mt-2 text-xs text-muted">{species.description}</p>
+            )}
             <div className="mt-2.5 flex items-center justify-between gap-3">
               <p className="num text-[11px] text-muted">
-                {species.baseProduction} base coins/hr ·{" "}
-                {formatDuration(incubationSeconds(pack, species.id) * 1000)} to hatch
+                {species.baseProduction} base coins/hr
                 {owned > 0 && ` · you own ${owned}`}
               </p>
               <Button
                 variant="solid"
                 onClick={() => act({ type: "buySpecies", speciesId: species.id })}
-                disabled={full || save.coins < (species.marketPrice ?? 0)}
+                disabled={wait > 0 || save.coins < (species.marketPrice ?? 0)}
               >
-                Buy · <span className="num">{formatNumber(species.marketPrice ?? 0)}</span>
+                {wait > 0 ? (
+                  <>Back in {formatDuration(wait)}</>
+                ) : (
+                  <>
+                    Buy · <span className="num">{formatNumber(species.marketPrice ?? 0)}</span>
+                  </>
+                )}
               </Button>
             </div>
           </Panel>

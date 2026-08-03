@@ -303,3 +303,20 @@ export function formatDuration(ms: number): string {
   const h = Math.floor(m / 60);
   return `${h}h ${m % 60}m`;
 }
+
+/**
+ * Milliseconds until this dragon can be bought again, or 0 when it is available.
+ * The market sells each kind once a day, so coins alone cannot buy a collection.
+ */
+export function marketCooldownLeft(
+  pack: ContentPack,
+  save: SaveGame,
+  speciesId: string,
+  now: number,
+): number {
+  const seconds = pack.balance.marketCooldownSeconds ?? 0;
+  if (seconds <= 0) return 0;
+  const last = save.marketPurchases?.[speciesId];
+  if (!last) return 0;
+  return Math.max(0, last + seconds * 1000 - now);
+}

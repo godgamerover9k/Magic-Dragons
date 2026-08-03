@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
 import { childrenOf, roots, speciesInTaxon } from "@/game/taxonomy";
-import type { Species, Taxon } from "@/game/types";
+import type { ContentPack, Species, Taxon } from "@/game/types";
 import type { Game } from "@/game/useGame";
 import { Button, Panel, SectionHeading } from "./ui";
 
@@ -58,7 +58,7 @@ export function CodexTab({ game }: { game: Game }) {
       </div>
 
       <Panel className="p-3">
-        {roots(pack).map((taxon) => (
+        {sortKids(pack, roots(pack)).map((taxon) => (
           <Branch
             key={taxon.id}
             taxon={taxon}
@@ -77,6 +77,21 @@ export function CodexTab({ game }: { game: Game }) {
         everything beneath it.
       </p>
     </div>
+  );
+}
+
+/**
+ * Branches the player has found something in come first; the rest collect
+ * underneath. Sorting on the payload's name would not do — a branch can carry a
+ * name it has not earned yet, because its dragon is on sale, and the Codex still
+ * shows that as unknown. Whether a count was sent is the same test the display
+ * uses, so the two agree.
+ */
+function sortKids(pack: ContentPack, nodes: Taxon[]): Taxon[] {
+  const totals = (pack as { branchTotals?: Record<string, number> }).branchTotals ?? {};
+  const found = (t: Taxon) => (totals[t.id] === undefined ? 1 : 0);
+  return [...nodes].sort(
+    (a, b) => found(a) - found(b) || a.name.localeCompare(b.name),
   );
 }
 
@@ -159,7 +174,7 @@ function Branch({
             ))}
           </div>
 
-          {kids.map((child) => (
+          {sortKids(pack, kids).map((child) => (
             <Branch
               key={child.id}
               taxon={child}
@@ -222,7 +237,9 @@ function SpeciesRow({
 
       {open && known && (
         <div className="mb-2 rounded border border-line bg-raised p-2.5">
-          <p className="text-[11px] leading-snug text-muted">{species.description}</p>
+          {species.description && (
+            <p className="text-[11px] leading-snug text-muted">{species.description}</p>
+          )}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
             <span className="num text-muted">
               {formatNumber(species.baseProduction)} base coins/hr

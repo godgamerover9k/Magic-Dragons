@@ -227,6 +227,8 @@ export interface BalanceConfig {
   parentWeight: number;
   /** Fallback incubation for species that do not set their own. */
   defaultIncubationSeconds: number;
+  /** How long the market withholds a dragon after one is bought. */
+  marketCooldownSeconds: number;
 
   maxBakeries: number;
   /** Coin cost of the very first oven, kept low so a new keeper can reach it. */
@@ -337,6 +339,8 @@ export interface SaveGame {
   adminMode: boolean;
   /** Every species ever owned — drives the Codex and rule conditions. */
   discovered: SpeciesId[];
+  /** When each dragon was last bought, for the market's daily limit. */
+  marketPurchases?: Record<SpeciesId, number>;
   /**
    * What each pairing has produced, keyed by the two parent species sorted and
    * joined. Only ever written from hatches the player actually saw.

@@ -7,7 +7,7 @@ each rule is visible. Replace all of it in Admin.
 
 | Dragon | Element | Price | Coins/min | Fills in |
 |---|---|---|---|---|
-| Fire Dragon | Fire | 2,250 | 3.0 | 20 min |
+| Fire Dragon | Fire | 1,000 | 3.0 | 20 min |
 | Earth Dragon | Earth | 4,500 | 3.6 | 24 min |
 | Water Dragon | Water | 8,100 | 4.2 | 30 min |
 | Air Dragon | Air | bred only | 9.7 | 45 min |
@@ -177,8 +177,11 @@ timer is decided by whatever is inside the egg, not by the parents - so a long
 wait quietly tells the player something rare is coming. Dragons that set no time
 fall back to `defaultIncubationSeconds`.
 
-The base set runs from 5 minutes for a Fire Dragon to 24 hours for a Perfection
-Dragon.
+The base set runs from 30 minutes for a Fire Dragon to six days for a Perfection
+Dragon. The whole ladder scales together, so changing the floor moves everything.
+
+The market sells each dragon **once a day**, set by `marketCooldownSeconds`. A
+collection has to be bred, not bought.
 
 ## Hatching
 

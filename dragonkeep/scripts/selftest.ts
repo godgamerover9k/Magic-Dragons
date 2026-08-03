@@ -6,6 +6,7 @@ import {
   coinsPerHour,
   foodToNextLevel,
   hoursToFill,
+  marketCooldownLeft,
   nextBakeryCost,
   nextRoostSlotCost,
   ovenState,
@@ -438,10 +439,19 @@ check("dragons outside the branch cannot stand in for a base element", () => {
   }
 });
 
-check("earth and fire make lava, and rarely", () => {
+check("earth and fire make lava about one time in five", () => {
   const odds = combo("earth-dragon", "fire-dragon", "lava-dragon");
-  assert.ok(odds > 0 && odds < 0.08, `odds were ${odds}`);
+  assert.ok(odds > 0.17 && odds < 0.24, `odds were ${odds}`);
   assert.strictEqual(combo("earth-dragon", "water-dragon", "lava-dragon"), 0);
+});
+
+check("reaching max tier costs 360 tier ones", () => {
+  // Each step eats n duplicates and keeps one, so the cost compounds:
+  // 3 x 4 x 5 x 6 with merge costs of 2/3/4/5.
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 2), 3);
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 3), 12);
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", 4), 60);
+  assert.strictEqual(tierOneCost(pack, "fire-dragon", pack.balance.maxTier), 360);
 });
 
 check("earth and water make plant", () => {
@@ -1065,26 +1075,24 @@ check("older saves are repaired rather than dropped", () => {
 });
 
 console.log("\nIncubation");
-check("nothing outside the four long ones passes three hours", () => {
-  const long = [
-    "life-dragon",
-    "monster-dragon",
-    "corruption-dragon",
-    "perfection-dragon",
-    "ether-dragon",
-  ];
-  for (const s of Object.values(pack.species)) {
-    if (long.includes(s.id)) continue;
+check("the incubation ladder runs from thirty minutes upward", () => {
+  // Fire is the floor and everything else sits above it, in order of what it
+  // earns. The whole ladder is scaled together, so the shape survives retuning.
+  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 1800);
+
+  const byOutput = Object.values(pack.species)
+    .filter((s) => s.incubationSeconds)
+    .sort((a, b) => a.baseProduction - b.baseProduction);
+  for (const s of byOutput)
     assert.ok(
-      incubationSeconds(pack, s.id) < 10800,
-      `${s.name} sits at ${incubationSeconds(pack, s.id)}s`,
+      incubationSeconds(pack, s.id) >= 1800,
+      `${s.name} hatches faster than a Fire Dragon`,
     );
-  }
 });
 
 check("each dragon can set its own incubation", () => {
-  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 300);
-  assert.strictEqual(incubationSeconds(pack, "monster-dragon"), 18000);
+  assert.strictEqual(incubationSeconds(pack, "fire-dragon"), 1800);
+  assert.strictEqual(incubationSeconds(pack, "monster-dragon"), 108000);
   assert.ok(
     incubationSeconds(pack, "air-dragon") > incubationSeconds(pack, "water-dragon"),
   );
@@ -1258,24 +1266,33 @@ check("an egg in the nest counts as a way forward", () => {
   assert.strictEqual(ensureViable(pack, empty).coins, 0, "an egg is already a way out");
 });
 
-check("known branches sort above unknown ones", () => {
-  const shown = redactPack(pack, newGame(pack, NOW), false);
-  const walk = (parentId: string | null): void => {
-    const kids = Object.values(shown.taxa).filter((x) => x.parentId === parentId);
-    const ordered = childrenOf(shown, parentId ?? "");
-    if (parentId) {
-      const names = ordered.map((x) => Boolean(x.name));
-      // Once an unnamed branch appears, every one after it is unnamed too.
-      const firstUnknown = names.indexOf(false);
-      if (firstUnknown >= 0)
-        assert.ok(
-          names.slice(firstUnknown).every((named) => !named),
-          "a named branch sorted below an unknown one",
-        );
-    }
+check("branches with something found sort above the rest", () => {
+  const save = { ...newGame(pack, NOW), discovered: ["fire-dragon"] };
+  const shown = redactPack(pack, save, false);
+  // The Codex sorts on whether a count was sent, not on whether a name was —
+  // Earth carries a name because its dragon is for sale, but nothing there has
+  // been found, so it belongs with the unknowns.
+  const found = (id: string) => (shown.branchTotals[id] === undefined ? 1 : 0);
+  const walk = (parentId: string | null) => {
+    const kids = Object.values(shown.taxa)
+      .filter((x) => x.parentId === parentId)
+      .sort((a, b) => found(a.id) - found(b.id) || a.name.localeCompare(b.name));
+    const flags = kids.map((k) => found(k.id));
+    const firstUnknown = flags.indexOf(1);
+    if (firstUnknown >= 0)
+      assert.ok(
+        flags.slice(firstUnknown).every((f) => f === 1),
+        "a found branch sorted below an unfound one",
+      );
     for (const kid of kids) walk(kid.id);
   };
-  for (const root of roots(shown)) walk(root.id);
+  walk(null);
+
+  // Concretely: under Base Elements, Fire comes before Earth.
+  const base = Object.values(shown.taxa).filter((x) => x.parentId === "base-elements");
+  assert.strictEqual(found("fire"), 0);
+  assert.strictEqual(found("earth"), 1, "Earth is named but unfound");
+  assert.ok(base.length >= 2);
 });
 
 console.log("\nBreeding log");
@@ -1305,6 +1322,43 @@ check("repeat hatches accumulate", () => {
   }
   const row = save.breedingLog![pairKey(a.speciesId, b.speciesId)];
   assert.strictEqual(Object.values(row).reduce((n, c) => n + c, 0), 5);
+});
+
+console.log("\nMarket limits");
+check("a dragon can be bought twice a day", () => {
+  const save = { ...newGame(pack, NOW), coins: 1_000_000 };
+  const first = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  assert.ok(first.ok, first.message);
+
+  const again = applyAction(pack, first.save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  assert.ok(!again.ok, "bought twice in a day");
+  assert.match(again.message, /today/);
+});
+
+check("the limit is per dragon, not per shop", () => {
+  const save = { ...newGame(pack, NOW), coins: 1_000_000 };
+  const bought = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  const other = applyAction(pack, bought.save, { type: "buySpecies", speciesId: "earth-dragon" }, ctx());
+  assert.ok(other.ok, other.message);
+});
+
+check("the shelf refills after the cooldown", () => {
+  const save = { ...newGame(pack, NOW), coins: 1_000_000 };
+  const bought = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  const later = NOW + pack.balance.marketCooldownSeconds * 1000 + 1;
+  assert.strictEqual(marketCooldownLeft(pack, bought.save, "fire-dragon", later), 0);
+  const again = applyAction(pack, bought.save, { type: "buySpecies", speciesId: "fire-dragon" }, { ...ctx(), now: later });
+  assert.ok(again.ok, again.message);
+});
+
+check("a designer is not held to it", () => {
+  const save = { ...newGame(pack, NOW), adminMode: true, coins: 0 };
+  let current = save;
+  for (let i = 0; i < 3; i++) {
+    const r = applyAction(pack, current, { type: "buySpecies", speciesId: "fire-dragon" }, ctx(true));
+    assert.ok(r.ok, r.message);
+    current = r.save;
+  }
 });
 
 console.log("\nLeaderboard names");
@@ -1740,9 +1794,10 @@ check("only perched dragons earn", () => {
 });
 
 check("storage is unlimited", () => {
-  let save = { ...seeded(["fire-dragon"]), roostCapacity: 1, coins: 10_000_000 };
+  // Granted rather than bought, since the market only sells one a day.
+  let save = { ...seeded(["fire-dragon"]), roostCapacity: 1 };
   for (let i = 0; i < 25; i++)
-    save = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx()).save;
+    save = applyAction(pack, save, { type: "grantDragon", speciesId: "fire-dragon" }, ctx(true)).save;
   assert.ok(save.dragons.length >= 25);
   assert.strictEqual(perchedCount(save), 1);
 });

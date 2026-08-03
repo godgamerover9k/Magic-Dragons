@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 26,
+  "version": 29,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -116,10 +116,10 @@
       "color": "#D9633F",
       "tags": [],
       "baseProduction": 180,
-      "incubationSeconds": 300,
+      "incubationSeconds": 1800,
       "obtainable": true,
-      "marketPrice": 2250,
-      "description": "Placeholder. Replace this dragon in Admin.",
+      "marketPrice": 1000,
+      "description": "",
       "custom": {}
     },
     "earth-dragon": {
@@ -130,10 +130,10 @@
       "tags": [],
       "baseProduction": 216,
       "coinStorageHours": 0.4,
-      "incubationSeconds": 600,
+      "incubationSeconds": 3600,
       "obtainable": true,
       "marketPrice": 4500,
-      "description": "Placeholder. Replace this dragon in Admin.",
+      "description": "",
       "custom": {}
     },
     "water-dragon": {
@@ -144,10 +144,10 @@
       "tags": [],
       "baseProduction": 252,
       "coinStorageHours": 0.5,
-      "incubationSeconds": 900,
+      "incubationSeconds": 5400,
       "obtainable": true,
       "marketPrice": 8100,
-      "description": "Placeholder. Replace this dragon in Admin.",
+      "description": "",
       "custom": {}
     },
     "air-dragon": {
@@ -159,9 +159,9 @@
       "baseProduction": 583,
       "xpMultiplier": 1.25,
       "coinStorageHours": 0.75,
-      "incubationSeconds": 2400,
+      "incubationSeconds": 14400,
       "obtainable": true,
-      "description": "Placeholder. Replace this dragon in Admin. Not sold \u2014 bred only.",
+      "description": "",
       "custom": {}
     },
     "elemental-dragon": {
@@ -170,12 +170,12 @@
       "taxonId": "hybrid",
       "color": "#B98CD6",
       "baseProduction": 900,
-      "incubationSeconds": 4500,
+      "incubationSeconds": 27000,
       "coinStorageHours": 0.75,
       "xpMultiplier": 1.6,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Born of two different elements at once, belonging to none.",
+      "description": "",
       "custom": {}
     },
     "lava-dragon": {
@@ -184,12 +184,12 @@
       "taxonId": "hybrid",
       "color": "#E0552B",
       "baseProduction": 700,
-      "incubationSeconds": 3000,
+      "incubationSeconds": 18000,
       "coinStorageHours": 0.6,
       "xpMultiplier": 1.4,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Stone that never finished cooling.",
+      "description": "",
       "custom": {}
     },
     "plant-dragon": {
@@ -198,12 +198,12 @@
       "taxonId": "life",
       "color": "#6FAE55",
       "baseProduction": 500,
-      "incubationSeconds": 1800,
+      "incubationSeconds": 10800,
       "coinStorageHours": 0.6,
       "xpMultiplier": 1.3,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Roots where it rests, and resents being moved.",
+      "description": "",
       "custom": {}
     },
     "inferno-dragon": {
@@ -212,12 +212,12 @@
       "taxonId": "fire",
       "color": "#C2361F",
       "baseProduction": 1600,
-      "incubationSeconds": 8100,
+      "incubationSeconds": 48600,
       "coinStorageHours": 0.8,
       "xpMultiplier": 1.8,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Fire that has found something to burn.",
+      "description": "",
       "custom": {}
     },
     "life-dragon": {
@@ -226,12 +226,12 @@
       "taxonId": "life",
       "color": "#59C9A5",
       "baseProduction": 2500,
-      "incubationSeconds": 10800,
+      "incubationSeconds": 64800,
       "coinStorageHours": 1.0,
       "xpMultiplier": 2.2,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Two growing things, and something more than either.",
+      "description": "",
       "custom": {}
     },
     "perfection-dragon": {
@@ -240,12 +240,12 @@
       "taxonId": "duality",
       "color": "#EFE7C8",
       "baseProduction": 5000,
-      "incubationSeconds": 86400,
+      "incubationSeconds": 518400,
       "coinStorageHours": 1.25,
       "xpMultiplier": 2.6,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Both parents were flawless. This one had to be.",
+      "description": "",
       "custom": {}
     },
     "corruption-dragon": {
@@ -254,12 +254,12 @@
       "taxonId": "duality",
       "color": "#6B4E8C",
       "baseProduction": 1200,
-      "incubationSeconds": 21600,
+      "incubationSeconds": 129600,
       "coinStorageHours": 0.8,
       "xpMultiplier": 1.8,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Neither parent had anything to pass on, and something filled the gap.",
+      "description": "",
       "custom": {}
     },
     "metal-dragon": {
@@ -268,12 +268,12 @@
       "taxonId": "earth",
       "color": "#A8B0BA",
       "baseProduction": 1400,
-      "incubationSeconds": 6300,
+      "incubationSeconds": 37800,
       "coinStorageHours": 0.7,
       "xpMultiplier": 1.7,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Earth put under something that had no business being in it.",
+      "description": "",
       "custom": {}
     },
     "monster-dragon": {
@@ -282,12 +282,12 @@
       "taxonId": "life",
       "color": "#7A3B52",
       "baseProduction": 4000,
-      "incubationSeconds": 18000,
+      "incubationSeconds": 108000,
       "coinStorageHours": 1.0,
       "xpMultiplier": 2.4,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. Something that grows, crossed with something that should not.",
+      "description": "",
       "custom": {}
     },
     "ether-dragon": {
@@ -296,12 +296,12 @@
       "taxonId": "physical",
       "color": "#C9BFE8",
       "baseProduction": 7500,
-      "incubationSeconds": 64800,
+      "incubationSeconds": 388800,
       "coinStorageHours": 1.4,
       "xpMultiplier": 2.8,
       "obtainable": true,
       "tags": [],
-      "description": "Placeholder. What is left when an element is refined past having one.",
+      "description": "",
       "custom": {}
     }
   },
@@ -348,11 +348,11 @@
       "outcomes": [
         {
           "speciesId": "lava-dragon",
-          "weight": 4
+          "weight": 26
         }
       ],
       "enabled": true,
-      "notes": "Deliberately slim \u2014 the parents sit at 50 each, so this lands near 4%."
+      "notes": "Around one breed in five."
     },
     {
       "id": "rule-plant",
@@ -605,7 +605,7 @@
     }
   ],
   "balance": {
-    "startingCoins": 2250,
+    "startingCoins": 1000,
     "startingFood": 60,
     "startingSpecies": [],
     "roostCapacity": 6,
@@ -632,7 +632,7 @@
     "levelXpExponent": 1.45,
     "maxLevel": 40,
     "parentWeight": 50,
-    "defaultIncubationSeconds": 60,
+    "defaultIncubationSeconds": 360,
     "maxBakeries": 3,
     "bakeryCost": 3150,
     "bakeryCostGrowth": 3,
@@ -688,7 +688,8 @@
       }
     ],
     "xpPerFood": 1,
-    "firstBakeryCost": 100
+    "firstBakeryCost": 100,
+    "marketCooldownSeconds": 43200
   },
   "custom": {}
 }

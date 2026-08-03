@@ -220,7 +220,7 @@ function DragonCard({
           {!atMax && (
             <div>
               <p className="eyebrow mb-1.5">
-                Feed · {pack.balance.xpPerFood} xp per food
+                Feed
                 {needed !== null && ` · ${formatNumber(needed)} to next level`}
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -345,7 +345,9 @@ function DragonCard({
             </div>
           )}
 
-          <p className="text-[11px] text-muted">{species.description}</p>
+          {species.description && (
+            <p className="text-[11px] text-muted">{species.description}</p>
+          )}
         </div>
       )}
     </Panel>
