@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 32,
+  "version": 33,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -691,6 +691,46 @@
       ],
       "enabled": true,
       "notes": "Lava sits outside the Fire branch, so it gets its own slimmer route."
+    },
+    {
+      "id": "rule-fire-earth",
+      "label": "Two Fires",
+      "a": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "fire-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "earth-dragon",
+          "weight": 4
+        }
+      ],
+      "enabled": true,
+      "notes": "A slim chance of something other than more fire."
+    },
+    {
+      "id": "rule-earth-water",
+      "label": "Two Earths",
+      "a": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "water-dragon",
+          "weight": 4
+        }
+      ],
+      "enabled": true,
+      "notes": "The same slim chance, one element along."
     }
   ],
   "balance": {

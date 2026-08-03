@@ -15,9 +15,7 @@ import {
   speciesOf,
   xpToNextLevel,
 } from "@/game/economy";
-import {
-  nameOf,
-} from "@/game/engine";
+import { nameOf, nestsWith } from "@/game/engine";
 import { nextRoostSlotCost } from "@/game/economy";
 import { taxonPath } from "@/game/taxonomy";
 import { IV_MAX } from "@/game/types";
@@ -143,6 +141,7 @@ function DragonCard({
 }) {
   const { pack, save, now, act } = game;
   const [confirmRelease, setConfirmRelease] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
   const species = speciesOf(pack, dragon);
   const color = colorOf(pack, dragon.speciesId);
   if (!save || !species) return null;
@@ -152,6 +151,7 @@ function DragonCard({
   const cap = coinCap(pack, dragon);
   const need = xpToNextLevel(pack, dragon);
   const atMax = dragon.level >= pack.balance.maxLevel;
+  const sitting = nestsWith(save, dragon.id).length > 0;
   const cost = mergeCost(pack, dragon);
   const fodder = eligibleFodder(save.dragons, dragon);
   const needed = foodToNextLevel(pack, dragon);
@@ -204,7 +204,12 @@ function DragonCard({
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             <Stat label="Experience" value={atMax ? "max level" : `${formatNumber(dragon.xp)} / ${formatNumber(need)}`} />
             <Stat label="Power" value={formatNumber(powerOf(pack, dragon))} />
-            <Stat label="Working" value={dragon.stored ? "in storage" : "on a perch"} />
+            <Stat
+              label="Working"
+              value={
+                dragon.stored ? "in storage" : sitting ? "minding an egg" : "on a perch"
+              }
+            />
             <Stat
               label="Capacity"
               value={
@@ -252,6 +257,47 @@ function DragonCard({
                 ? "Max tier reached"
                 : `Merge · needs ${cost} duplicates at tier ${dragon.tier} · have ${fodder.length}`}
             </p>
+            {cost !== null && fodder.length > 0 && (
+              <div className="mb-2 space-y-1">
+                <p className="text-[11px] text-muted">
+                  Pick {cost} to merge in, or leave it and the least developed are
+                  taken. The survivor keeps the best level and{" "}
+                  {pack.iv.name.toLowerCase()} of the whole group.
+                </p>
+                {fodder.map((d) => {
+                  const picked = chosen.includes(d.id);
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() =>
+                        setChosen(
+                          picked
+                            ? chosen.filter((id) => id !== d.id)
+                            : [...chosen, d.id],
+                        )
+                      }
+                      className={`flex w-full items-center gap-2 rounded border px-2.5 py-1.5 text-left text-xs ${
+                        picked ? "border-verdigris bg-verdigris/10" : "border-line"
+                      }`}
+                    >
+                      <span className="w-3 shrink-0 text-center" aria-hidden="true">
+                        {picked ? "✓" : ""}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{nameOf(pack, d)}</span>
+                      <span className="num shrink-0 text-muted">
+                        L{d.level} · IV {d.iv}
+                      </span>
+                    </button>
+                  );
+                })}
+                {chosen.length > 0 && chosen.length !== cost && (
+                  <p className="text-[11px] text-warn">
+                    {chosen.length} picked, {cost} needed.
+                  </p>
+                )}
+              </div>
+            )}
             {cost !== null && (
               <p className="mb-1.5 text-[11px] text-muted">
                 A tier {dragon.tier + 1} is{" "}
@@ -262,8 +308,19 @@ function DragonCard({
             <div className="flex flex-wrap gap-1.5">
               <Button
                 variant="solid"
-                onClick={() => act({ type: "merge", dragonId: dragon.id })}
-                disabled={cost === null || fodder.length < cost}
+                onClick={() => {
+                  act({
+                    type: "merge",
+                    dragonId: dragon.id,
+                    use: chosen.length === cost ? chosen : undefined,
+                  });
+                  setChosen([]);
+                }}
+                disabled={
+                  cost === null ||
+                  fodder.length < cost ||
+                  (chosen.length > 0 && chosen.length !== cost)
+                }
               >
                 Merge to tier {dragon.tier + 1}
               </Button>
@@ -275,7 +332,18 @@ function DragonCard({
                   Move to a perch
                 </Button>
               ) : (
-                <Button onClick={() => act({ type: "storeDragon", dragonId: dragon.id })}>
+                <Button
+                  onClick={() => {
+                    if (
+                      sitting &&
+                      !confirm(
+                        `${nameOf(pack, dragon)} is minding an egg. Storing it ends that breeding and the egg is lost. Continue?`,
+                      )
+                    )
+                      return;
+                    act({ type: "storeDragon", dragonId: dragon.id });
+                  }}
+                >
                   Put in storage
                 </Button>
               )}
@@ -326,7 +394,8 @@ function DragonCard({
               </p>
               <p className="mt-1 text-[11px] leading-snug text-muted">
                 It leaves the roost for good — its tier, its level and its{" "}
-                {pack.iv.name.toLowerCase()} of {dragon.iv} go with it. You get{" "}
+                {pack.iv.name.toLowerCase()} of {dragon.iv} go with it.
+                {sitting && " The egg it is minding is lost with it."} You get{" "}
                 <span className="num">{formatNumber(Math.round(cap * 0.5))}</span> coins
                 back. This cannot be undone.
               </p>

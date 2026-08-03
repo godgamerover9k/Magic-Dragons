@@ -126,7 +126,10 @@ function Branch({
   const known = found > 0;
 
   const expanded = open.has(taxon.id);
-  const hasContents = kids.length > 0 || own.length > 0;
+  // Only a branch the player has found something in can be opened. An unknown
+  // one holds nothing the client was sent, so expanding it would reveal a row
+  // of blanks and nothing else.
+  const hasContents = total !== undefined && (kids.length > 0 || own.length > 0);
 
   return (
     <div className={depth > 0 ? "relative branch pl-4" : ""}>

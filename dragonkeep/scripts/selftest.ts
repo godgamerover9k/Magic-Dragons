@@ -443,6 +443,18 @@ check("dragons outside the branch cannot stand in for a base element", () => {
   }
 });
 
+check("two fires can make an earth, rarely", () => {
+  const odds = combo("fire-dragon", "fire-dragon", "earth-dragon");
+  assert.ok(odds > 0 && odds < 0.08, `odds were ${odds}`);
+});
+
+check("two earths can make a water, rarely", () => {
+  const odds = combo("earth-dragon", "earth-dragon", "water-dragon");
+  assert.ok(odds > 0 && odds < 0.08, `odds were ${odds}`);
+  // And not the other way round.
+  assert.strictEqual(combo("water-dragon", "water-dragon", "earth-dragon"), 0);
+});
+
 check("earth and fire make lava about one time in five", () => {
   const odds = combo("earth-dragon", "fire-dragon", "lava-dragon");
   assert.ok(odds > 0.17 && odds < 0.24, `odds were ${odds}`);
@@ -1267,6 +1279,21 @@ check("an order cannot be collected early, and pays out once done", () => {
   assert.strictEqual(done.save.bakeries[0].batchId, null);
 });
 
+check("an oven remembers its last order", () => {
+  const built = buildBakery(pack, { ...seeded(), coins: 10000 }, NOW);
+  const oven = built.save.bakeries[0];
+  assert.strictEqual(oven.lastBatchId, undefined, "a new oven has no habit yet");
+
+  const started = startBatch(pack, built.save, oven.id, "batch-2", NOW);
+  assert.strictEqual(started.save.bakeries[0].lastBatchId, "batch-2");
+
+  // And it survives collection, so the next visit offers the same thing.
+  const batch = pack.balance.foodBatches.find((b) => b.id === "batch-2")!;
+  const done = collectBatch(pack, started.save, oven.id, NOW + batch.seconds * 1000);
+  assert.strictEqual(done.save.bakeries[0].batchId, null, "the oven is idle again");
+  assert.strictEqual(done.save.bakeries[0].lastBatchId, "batch-2", "but it remembers");
+});
+
 check("a busy oven refuses a second order", () => {
   const built = buildBakery(pack, { ...seeded(), coins: 10000 }, NOW);
   const oven = built.save.bakeries[0];
@@ -1370,6 +1397,44 @@ check("repeat hatches accumulate", () => {
 });
 
 console.log("\nNests");
+check("both parents must be on a perch to nest", () => {
+  const save = { ...seeded(), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const stored = { ...save, dragons: [a, { ...b, stored: true }] };
+  const r = applyAction(pack, stored, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  assert.ok(!r.ok);
+  assert.match(r.message, /perch/);
+});
+
+check("storing a parent ends the breeding", () => {
+  const save = { ...seeded(), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  assert.strictEqual(nestsOf(bred.save).length, 1);
+
+  const put = applyAction(pack, bred.save, { type: "storeDragon", dragonId: a.id }, ctx());
+  assert.ok(put.ok, put.message);
+  assert.strictEqual(nestsOf(put.save).length, 0, "the egg outlived its parent leaving");
+  assert.match(put.message, /lost/);
+});
+
+check("releasing a parent ends it too", () => {
+  const save = { ...seeded(["fire-dragon", "earth-dragon", "water-dragon"]), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const released = applyAction(pack, bred.save, { type: "releaseDragon", dragonId: b.id }, ctx());
+  assert.ok(released.ok, released.message);
+  assert.strictEqual(nestsOf(released.save).length, 0);
+});
+
+check("storing an uninvolved dragon leaves the egg alone", () => {
+  const save = { ...seeded(["fire-dragon", "earth-dragon", "water-dragon"]), roostCapacity: 9 };
+  const [a, b, c] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const put = applyAction(pack, bred.save, { type: "storeDragon", dragonId: c.id }, ctx());
+  assert.strictEqual(nestsOf(put.save).length, 1);
+});
+
 check("one nest to start, and it can only hold one egg", () => {
   const save = { ...seeded(["fire-dragon", "earth-dragon", "water-dragon"]), roostCapacity: 9 };
   assert.strictEqual(nestCapacityOf(pack, save), 1);
@@ -1974,6 +2039,58 @@ check("a dragon cannot be perched when every perch is taken", () => {
   const r = applyAction(pack, full, { type: "perchDragon", dragonId: stored.id }, ctx());
   assert.ok(!r.ok);
   assert.match(r.message, /perch/);
+});
+
+check("fusing keeps the best level and IV of the group", () => {
+  let save = seeded(["fire-dragon"]);
+  const target = { ...save.dragons[0], level: 5, iv: 3 };
+  const strong = { ...make("fire-dragon"), id: "strong", level: 22, iv: 9 };
+  const sharp = { ...make("fire-dragon"), id: "sharp", level: 2, iv: 28 };
+  save = { ...save, dragons: [target, strong, sharp] };
+
+  const r = applyAction(pack, save, { type: "merge", dragonId: target.id }, ctx());
+  assert.ok(r.ok, r.message);
+  const merged = r.save.dragons.find((d) => d.id === target.id)!;
+  assert.strictEqual(merged.tier, 2);
+  assert.strictEqual(merged.level, 22, "it should take the best level");
+  assert.strictEqual(merged.iv, 28, "and the best IV, from a different dragon");
+});
+
+check("a chosen set is consumed, and must be exactly right", () => {
+  let save = seeded(["fire-dragon"]);
+  const target = save.dragons[0];
+  const extras = [1, 2, 3].map((n) => ({ ...make("fire-dragon"), id: `dupe${n}`, level: n }));
+  save = { ...save, dragons: [target, ...extras] };
+  const cost = mergeCost(pack, target)!;
+
+  const tooFew = applyAction(
+    pack, save,
+    { type: "merge", dragonId: target.id, use: [extras[0].id] },
+    ctx(),
+  );
+  assert.ok(!tooFew.ok, "one short went through");
+
+  const picked = extras.slice(0, cost).map((d) => d.id);
+  const done = applyAction(pack, save, { type: "merge", dragonId: target.id, use: picked }, ctx());
+  assert.ok(done.ok, done.message);
+  for (const id of picked)
+    assert.ok(!done.save.dragons.some((d) => d.id === id), `${id} survived`);
+  // The one left out is untouched.
+  assert.ok(done.save.dragons.some((d) => d.id === extras[cost].id));
+});
+
+check("a locked dragon cannot be chosen", () => {
+  let save = seeded(["fire-dragon"]);
+  const target = save.dragons[0];
+  const locked = { ...make("fire-dragon"), id: "locked", locked: true };
+  const spare = { ...make("fire-dragon"), id: "spare" };
+  save = { ...save, dragons: [target, locked, spare] };
+  const r = applyAction(
+    pack, save,
+    { type: "merge", dragonId: target.id, use: ["locked", "spare"] },
+    ctx(),
+  );
+  assert.ok(!r.ok);
 });
 
 check("merging consumes exactly the required duplicates", () => {

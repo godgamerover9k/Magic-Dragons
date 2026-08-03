@@ -311,6 +311,9 @@ export function startBreeding(
   const a = save.dragons.find((d) => d.id === aId);
   const b = save.dragons.find((d) => d.id === bId);
   if (!a || !b) return fail(save, "Both parents must be in your roost.");
+  // Nesting is work, and work happens on a perch.
+  if (a.stored || b.stored)
+    return fail(save, "Both parents must be on a perch to nest.");
 
   const pool = buildPool(pack, a, b);
   const resultSpeciesId = rollPool(pool, rng());
@@ -410,10 +413,18 @@ export function skipIncubation(save: SaveGame, now = Date.now()): ActionResult {
 
 // --- Merging ---------------------------------------------------------------
 
+/**
+ * Fusing keeps the best of everything that went into it. The survivor takes the
+ * highest level and the highest individual value of the whole group, so a player
+ * is never punished for feeding their best duplicate into the merge.
+ *
+ * `use` names the dragons to consume. Left out, the least developed are taken.
+ */
 export function merge(
   pack: ContentPack,
   save: SaveGame,
   targetId: string,
+  use?: string[],
 ): ActionResult {
   const target = save.dragons.find((d) => d.id === targetId);
   if (!target) return fail(save, "That dragon is not in your roost.");
@@ -421,19 +432,44 @@ export function merge(
   if (cost === null) return fail(save, `${nameOf(pack, target)} is at max tier.`);
 
   const fodder = eligibleFodder(save.dragons, target);
-  if (fodder.length < cost)
-    return fail(
-      save,
-      `Needs ${cost} unlocked duplicates at tier ${target.tier} — you have ${fodder.length}.`,
-    );
 
-  // Consume the least developed duplicates first.
-  const consumed = [...fodder]
-    .sort((x, y) => x.level - y.level || (x.iv ?? 0) - (y.iv ?? 0))
-    .slice(0, cost);
+  let consumed: Dragon[];
+  if (use && use.length > 0) {
+    const chosen = use
+      .map((id) => fodder.find((d) => d.id === id))
+      .filter(Boolean) as Dragon[];
+    if (chosen.length !== use.length)
+      return fail(save, "One of those cannot be merged in.");
+    if (chosen.length !== cost)
+      return fail(save, `Pick exactly ${cost} to merge in — you chose ${chosen.length}.`);
+    consumed = chosen;
+  } else {
+    if (fodder.length < cost)
+      return fail(
+        save,
+        `Needs ${cost} unlocked duplicates at tier ${target.tier} — you have ${fodder.length}.`,
+      );
+    // Least developed first, since the best of the group is kept either way.
+    consumed = [...fodder]
+      .sort((x, y) => x.level - y.level || (x.iv ?? 0) - (y.iv ?? 0))
+      .slice(0, cost);
+  }
+
   const consumedIds = new Set(consumed.map((d) => d.id));
+  const group = [target, ...consumed];
+  const best = group.reduce((a, b) => (b.level > a.level ? b : a));
 
-  const upgraded: Dragon = { ...target, tier: target.tier + 1 };
+  const upgraded: Dragon = {
+    ...target,
+    tier: target.tier + 1,
+    level: best.level,
+    xp: best.xp,
+    iv: Math.max(...group.map((d) => d.iv ?? 0)),
+  };
+
+  const gained: string[] = [];
+  if (upgraded.level > target.level) gained.push(`level ${upgraded.level}`);
+  if ((upgraded.iv ?? 0) > (target.iv ?? 0)) gained.push(`${pack.iv.name} ${upgraded.iv}`);
 
   return {
     save: {
@@ -443,7 +479,9 @@ export function merge(
         .map((d) => (d.id === targetId ? upgraded : d)),
     },
     ok: true,
-    message: `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}.`,
+    message: gained.length
+      ? `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}, taking ${gained.join(" and ")}.`
+      : `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}.`,
   };
 }
 
@@ -547,7 +585,13 @@ export function startBatch(
       ...spend(save, batch.coinCost),
       bakeries: save.bakeries.map((b) =>
         b.id === bakeryId
-          ? { ...b, batchId, startedAt: now, readyAt: now + batch.seconds * 1000 }
+          ? {
+              ...b,
+              batchId,
+              lastBatchId: batchId,
+              startedAt: now,
+              readyAt: now + batch.seconds * 1000,
+            }
           : b,
       ),
     },
@@ -655,19 +699,36 @@ export function perchDragon(save: SaveGame, dragonId: string): ActionResult {
   };
 }
 
+/** Nests this dragon is currently sitting on. */
+export function nestsWith(save: SaveGame, dragonId: string): BreedingSlot[] {
+  return nestsOf(save).filter((n) => n.parentA === dragonId || n.parentB === dragonId);
+}
+
 export function storeDragon(save: SaveGame, dragonId: string): ActionResult {
   const dragon = save.dragons.find((d) => d.id === dragonId);
   if (!dragon) return fail(save, "No such dragon.");
   if (dragon.stored) return fail(save, "It is already in storage.");
+
+  // A dragon off its perch is not sitting on anything. Any egg it was minding
+  // is lost — which is why the interface asks first.
+  const abandoned = nestsWith(save, dragonId);
+  const kept = nestsOf(save).filter(
+    (n) => n.parentA !== dragonId && n.parentB !== dragonId,
+  );
+
   return {
     save: {
       ...save,
+      breeding: null,
+      nests: kept,
       dragons: save.dragons.map((d) =>
         d.id === dragonId ? { ...d, stored: true } : d,
       ),
     },
     ok: true,
-    message: "Moved to storage. It earns nothing there.",
+    message: abandoned.length
+      ? "Moved to storage. The egg it was minding is lost."
+      : "Moved to storage. It earns nothing there.",
   };
 }
 
@@ -681,10 +742,15 @@ export function releaseDragon(
   if (dragon.locked) return fail(save, "That dragon is locked.");
   if (save.dragons.length <= 1) return fail(save, "You cannot release your last dragon.");
   const refund = Math.round(coinCap(pack, dragon) * 0.5);
+  const kept = nestsOf(save).filter(
+    (n) => n.parentA !== dragonId && n.parentB !== dragonId,
+  );
   return {
     save: {
       ...save,
       coins: save.coins + refund,
+      breeding: null,
+      nests: kept,
       dragons: save.dragons.filter((d) => d.id !== dragonId),
     },
     ok: true,

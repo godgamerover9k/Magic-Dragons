@@ -43,7 +43,7 @@ export type Action =
   | { type: "breed"; parentA: string; parentB: string }
   | { type: "hatch"; nestId?: string }
   | { type: "buyNest" }
-  | { type: "merge"; dragonId: string }
+  | { type: "merge"; dragonId: string; use?: string[] }
   | { type: "buySpecies"; speciesId: string }
   | { type: "buyRoostSlot" }
   | { type: "buildBakery" }
@@ -140,7 +140,7 @@ export function applyAction(
 
 
     case "merge":
-      return done(merge(pack, save, action.dragonId));
+      return done(merge(pack, save, action.dragonId, action.use));
 
     case "buySpecies":
       return done(buySpecies(pack, save, action.speciesId, now, rng));

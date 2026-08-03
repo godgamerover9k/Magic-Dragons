@@ -93,7 +93,10 @@ export function BakeryTab({ game }: { game: Game }) {
 
 function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }) {
   const { pack, save, now, act } = game;
-  const [selected, setSelected] = useState(pack.balance.foodBatches[0]?.id ?? "");
+  // Falls back to whatever this oven made last, so a habit does not have to be
+  // re-entered every time.
+  const remembered = oven.lastBatchId ?? oven.batchId ?? pack.balance.foodBatches[0]?.id;
+  const [selected, setSelected] = useState(remembered ?? "");
   const [open, setOpen] = useState(false);
   if (!save) return null;
 

@@ -310,9 +310,23 @@ Without that secret the endpoint does nothing, so the public URL costs nothing.
 ## Nests
 
 A keeper starts with one nest and can buy more, at 25,000 coins for the second
-and five times that each time after. Each nest holds one egg, a parent cannot
-sit on two at once, and an egg cannot be abandoned - the result is decided when
-the pair nests, so abandoning would be a free reroll.
+and five times that each time after. Each nest holds one egg, and a parent
+cannot sit on two at once.
+
+Both parents must be **on a perch** to nest, and must stay there. Storing or
+releasing a parent ends that breeding and the egg is lost - the interface asks
+first. An egg cannot otherwise be abandoned, since the result is decided when
+the pair nests and abandoning would be a free reroll.
+
+## Fusing
+
+A merge keeps the best of everything that went into it — the highest level and
+the highest individual value of the whole group, not the target's own. Feeding
+your best duplicate into a merge therefore costs nothing.
+
+By default the least developed duplicates are taken. The Roost card also lists
+every eligible duplicate so a player can choose exactly which ones go in; the
+server checks the count and refuses anything locked or of the wrong tier.
 
 ## Perches and storage
 

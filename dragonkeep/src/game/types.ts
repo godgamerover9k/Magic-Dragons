@@ -310,6 +310,11 @@ export interface Bakery {
   id: string;
   /** The batch currently baking, or null when the oven is idle. */
   batchId: string | null;
+  /**
+   * The last order this oven was given. An oven that has been making Banquets
+   * all week should not offer Scraps the next time you open it.
+   */
+  lastBatchId?: string | null;
   startedAt: number;
   readyAt: number;
 }
