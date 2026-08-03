@@ -130,9 +130,11 @@ function Branch({
           >
             {known ? taxon.name : "———"}
           </span>
-          <span className="num ml-auto text-[11px] text-muted">
-            {found}/{beneath.length}
-          </span>
+          {beneath.length > 0 && (
+            <span className="num ml-auto text-[11px] text-muted">
+              {found}/{beneath.length}
+            </span>
+          )}
         </div>
       </button>
 

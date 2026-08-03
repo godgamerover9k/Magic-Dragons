@@ -1296,6 +1296,40 @@ check("no breeding rule ever reaches an ordinary player", () => {
   }
 });
 
+check("the shape of the tree is sent, the names are not", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  // Same number of branches as the real tree — a player can see there is more.
+  assert.strictEqual(Object.keys(shown.taxa).length, Object.keys(pack.taxa).length);
+
+  // But nothing they have not unlocked is named, in the payload or the ids.
+  const realNames = new Set(Object.values(pack.taxa).map((x) => x.name));
+  for (const [id, taxon] of Object.entries(shown.taxa)) {
+    if (id.startsWith("unknown-")) {
+      assert.strictEqual(taxon.name, "", `${id} carries a name`);
+      assert.strictEqual(taxon.description, "");
+      assert.ok(!realNames.has(taxon.name));
+    }
+  }
+  for (const hidden of ["transcendent", "duality", "physical", "special", "life", "hybrid"])
+    assert.ok(!shown.taxa[hidden], `${hidden} kept its id`);
+});
+
+check("an anonymous branch has nothing in it to count", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  for (const [id] of Object.entries(shown.taxa)) {
+    if (!id.startsWith("unknown-")) continue;
+    const inside = Object.values(shown.species).filter((s) => s.taxonId === id);
+    assert.deepStrictEqual(inside, [], `${id} leaked its contents`);
+  }
+});
+
+check("placeholder ids are stable between requests", () => {
+  const save = newGame(pack, NOW);
+  const a = redactPack(pack, save, false);
+  const b = redactPack(pack, save, false);
+  assert.deepStrictEqual(Object.keys(a.taxa).sort(), Object.keys(b.taxa).sort());
+});
+
 check("undiscovered branches are withheld", () => {
   const shown = redactPack(pack, seeded(), false);
   for (const id of ["transcendent", "duality", "physical", "special", "life"])

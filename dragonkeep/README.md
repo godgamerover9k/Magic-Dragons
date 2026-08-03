@@ -329,8 +329,11 @@ the client starts with an empty pack, filling it from `/api/game` with a slice
 cut to what has been unlocked:
 
 - **Dragons** - only those discovered, currently owned, on sale, or inside an egg
-- **Branches** - only those holding something visible, re-rooted so the tree
-  stays valid
+- **Branches** - the whole shape is sent, so a player can see there is more to
+  find, but anything holding nothing they have unlocked arrives anonymous: no
+  name, no description, and an opaque id, since "duality" would give the game
+  away as surely as the name would. Nothing inside it is sent, so there is no
+  count either.
 - **Breeding rules** - none at all. Not the weights, not the conditions, not the
   names of what they produce.
 

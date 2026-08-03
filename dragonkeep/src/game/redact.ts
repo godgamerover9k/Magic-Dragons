@@ -55,20 +55,30 @@ export function redactPack(
   if (isAdmin) return { ...pack, totalSpecies: total, complete: true };
 
   const keepSpecies = visibleSpecies(pack, save);
-  const keepTaxa = visibleTaxa(pack, keepSpecies);
+  const named = visibleTaxa(pack, keepSpecies);
 
   const species = Object.fromEntries(
     [...keepSpecies].map((id) => [id, pack.species[id]]),
   );
 
+  // The SHAPE of the tree is sent, so a player can see there is more to find.
+  // Branches holding nothing they have unlocked arrive anonymous: no name, no
+  // description, and an opaque id, since "duality" would give the game away as
+  // surely as the name would. Order is fixed so the same branch keeps the same
+  // placeholder between requests.
+  const order = Object.keys(pack.taxa).sort();
+  const alias = new Map<TaxonId, TaxonId>();
+  let n = 0;
+  for (const id of order) alias.set(id, named.has(id) ? id : `unknown-${++n}`);
+
   const taxa: Record<TaxonId, Taxon> = {};
-  for (const id of keepTaxa) {
+  for (const id of order) {
     const node = pack.taxa[id];
-    if (!node) continue;
-    // A parent that is itself hidden would leave a dangling reference, so the
-    // branch is re-rooted at the highest visible ancestor.
-    const parentId = node.parentId && keepTaxa.has(node.parentId) ? node.parentId : null;
-    taxa[id] = { ...node, parentId };
+    const shown = alias.get(id)!;
+    const parentId = node.parentId ? (alias.get(node.parentId) ?? null) : null;
+    taxa[shown] = named.has(id)
+      ? { ...node, parentId }
+      : { id: shown, name: "", parentId, rank: "", description: "", custom: {} };
   }
 
   return {
