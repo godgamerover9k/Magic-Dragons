@@ -9,7 +9,6 @@ import {
   ruleMatchesPair,
 } from "@/game/breeding";
 import { colorOf } from "@/game/economy";
-import { grantDragon, setAdminMode, skipIncubation } from "@/game/engine";
 import {
   flattenTree,
   removalImpact,
@@ -27,7 +26,6 @@ import type {
   BreedingRule,
   ContentPack,
   Matcher,
-  SaveGame,
   Species,
   Taxon,
 } from "@/game/types";
@@ -49,7 +47,7 @@ function uniqueId(base: string, taken: Record<string, unknown>) {
 }
 
 export function AdminTab({ game }: { game: Game }) {
-  const { pack, setPack, save, setSave, act, notify, resetEverything } = game;
+  const { pack, setPack, save, act, notify, resetEverything } = game;
   const issues = useMemo(() => validatePack(pack), [pack]);
   if (!save) return null;
 
@@ -121,19 +119,6 @@ export function AdminTab({ game }: { game: Game }) {
           <Button onClick={() => downloadJson("dragonkeep-save.json", save)}>
             Download save
           </Button>
-          <UploadButton
-            label="Load save"
-            onFile={async (file) => {
-              try {
-                const loaded = await readJsonFile<SaveGame>(file);
-                if (!loaded.dragons) throw new Error("That file is not a save.");
-                setSave(loaded);
-                notify("Save loaded.");
-              } catch (err) {
-                notify((err as Error).message, false);
-              }
-            }}
-          />
           <Button
             variant="danger"
             onClick={() => {
@@ -192,7 +177,7 @@ export function AdminTab({ game }: { game: Game }) {
             <Button
               variant={save.adminMode ? "solid" : "outline"}
               size="md"
-              onClick={() => act((s) => setAdminMode(s, !s.adminMode))}
+              onClick={() => act({ type: "setAdminMode", on: !save.adminMode })}
             >
               {save.adminMode ? "On" : "Off"}
             </Button>
@@ -202,16 +187,16 @@ export function AdminTab({ game }: { game: Game }) {
         {save.adminMode && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Button
-              onClick={() => setSave({ ...save, roostCapacity: save.roostCapacity + 10 })}
+              onClick={() => act({ type: "addPerches", count: 10 })}
             >
               +10 perches
             </Button>
-            <Button onClick={() => setSave({ ...save, discovered: Object.keys(pack.species) })}>
+            <Button onClick={() => act({ type: "revealCodex" })}>
               Reveal codex
             </Button>
             <Button
               disabled={!save.breeding}
-              onClick={() => act((s) => skipIncubation(s, Date.now()))}
+              onClick={() => act({ type: "skipIncubation" })}
             >
               Hatch egg now
             </Button>
@@ -224,7 +209,7 @@ export function AdminTab({ game }: { game: Game }) {
               value=""
               onChange={(e) => {
                 if (!e.target.value) return;
-                act((s) => grantDragon(pack, s, e.target.value, Date.now()));
+                act({ type: "grantDragon", speciesId: e.target.value });
               }}
             >
               <option value="">Choose a dragon…</option>
@@ -239,7 +224,8 @@ export function AdminTab({ game }: { game: Game }) {
 
         <p className="mt-3 text-[11px] text-muted">
           Turning admin mode off leaves whatever coins and food you actually had. It does
-          not hand you a balance.
+          not hand you a balance. Every action here is checked on the server against the
+          account you are signed in as.
         </p>
       </Section>
     </div>

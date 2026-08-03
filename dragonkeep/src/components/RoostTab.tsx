@@ -16,13 +16,7 @@ import {
   xpToNextLevel,
 } from "@/game/economy";
 import {
-  buyRoostSlot,
-  feed,
-  feedToNextLevel,
-  merge,
   nameOf,
-  releaseDragon,
-  updateDragon,
 } from "@/game/engine";
 import { nextRoostSlotCost } from "@/game/economy";
 import { taxonPath } from "@/game/taxonomy";
@@ -32,7 +26,7 @@ import type { Game } from "@/game/useGame";
 import { Bar, Button, Empty, Panel, SectionHeading, StatStrip } from "./ui";
 
 export function RoostTab({ game }: { game: Game }) {
-  const { pack, save, now, act } = game;
+  const { pack, save, act } = game;
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<"output" | "level" | "age" | "name">("output");
   if (!save) return null;
@@ -93,7 +87,7 @@ export function RoostTab({ game }: { game: Game }) {
         </div>
         <Button
           variant="solid"
-          onClick={() => act((s) => buyRoostSlot(pack, s))}
+          onClick={() => act({ type: "buyRoostSlot" })}
           disabled={save.coins < slotCost}
         >
           Buy perch
@@ -125,7 +119,7 @@ function DragonCard({
 }) {
   const { pack, save, now, act } = game;
   const species = speciesOf(pack, dragon);
-    const color = colorOf(pack, dragon.speciesId);
+  const color = colorOf(pack, dragon.speciesId);
   if (!save || !species) return null;
 
   const rate = coinsPerHour(pack, dragon);
@@ -207,7 +201,7 @@ function DragonCard({
                 {[1, 10, 100].map((n) => (
                   <Button
                     key={n}
-                    onClick={() => act((s) => feed(pack, s, dragon.id, n))}
+                    onClick={() => act({ type: "feed", dragonId: dragon.id, amount: n })}
                     disabled={!save.adminMode && save.food < n}
                   >
                     +{n}
@@ -215,7 +209,7 @@ function DragonCard({
                 ))}
                 <Button
                   variant="solid"
-                  onClick={() => act((s) => feedToNextLevel(pack, s, dragon.id))}
+                  onClick={() => act({ type: "feedToNextLevel", dragonId: dragon.id })}
                   disabled={!save.adminMode && save.food <= 0}
                 >
                   {needed !== null && !save.adminMode && save.food < needed
@@ -242,21 +236,21 @@ function DragonCard({
             <div className="flex flex-wrap gap-1.5">
               <Button
                 variant="solid"
-                onClick={() => act((s) => merge(pack, s, dragon.id))}
+                onClick={() => act({ type: "merge", dragonId: dragon.id })}
                 disabled={cost === null || fodder.length < cost}
               >
                 Merge to tier {dragon.tier + 1}
               </Button>
               <Button
                 onClick={() =>
-                  act((s) => updateDragon(s, dragon.id, { locked: !dragon.locked }), true)
+                  act({ type: "lockDragon", dragonId: dragon.id, locked: !dragon.locked }, true)
                 }
               >
                 {dragon.locked ? "Unlock" : "Lock"}
               </Button>
               <Button
                 variant="danger"
-                onClick={() => act((s) => releaseDragon(pack, s, dragon.id))}
+                onClick={() => act({ type: "releaseDragon", dragonId: dragon.id })}
                 disabled={dragon.locked}
               >
                 Release
@@ -271,13 +265,7 @@ function DragonCard({
                 value={dragon.nickname ?? ""}
                 placeholder={species.name}
                 onChange={(e) =>
-                  act(
-                    (s) =>
-                      updateDragon(s, dragon.id, {
-                        nickname: e.target.value || null,
-                      }),
-                    true,
-                  )
+                  act({ type: "renameDragon", dragonId: dragon.id, nickname: e.target.value || null }, true)
                 }
               />
             </label>
@@ -287,7 +275,7 @@ function DragonCard({
                 value={dragon.notes}
                 placeholder="Anything worth remembering"
                 onChange={(e) =>
-                  act((s) => updateDragon(s, dragon.id, { notes: e.target.value }), true)
+                  act({ type: "noteDragon", dragonId: dragon.id, notes: e.target.value }, true)
                 }
               />
             </label>

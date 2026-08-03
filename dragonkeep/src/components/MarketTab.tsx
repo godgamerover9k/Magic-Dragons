@@ -1,7 +1,6 @@
 "use client";
 
 import { colorOf, formatDuration, formatNumber, incubationSeconds } from "@/game/economy";
-import { buySpecies } from "@/game/engine";
 import { taxonPath } from "@/game/taxonomy";
 import type { Game } from "@/game/useGame";
 import { Button, Empty, Panel, SectionHeading } from "./ui";
@@ -56,7 +55,7 @@ export function MarketTab({ game }: { game: Game }) {
               </p>
               <Button
                 variant="solid"
-                onClick={() => act((s) => buySpecies(pack, s, species.id, Date.now()))}
+                onClick={() => act({ type: "buySpecies", speciesId: species.id })}
                 disabled={full || save.coins < (species.marketPrice ?? 0)}
               >
                 Buy · <span className="num">{formatNumber(species.marketPrice ?? 0)}</span>

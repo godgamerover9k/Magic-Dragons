@@ -282,6 +282,36 @@ it can hold by more, so the gap between collections gets longer rather than
 shorter. Tuned with `capacity.levelCoefficient`, `capacity.levelExponent` and
 `capacity.tierMultiplier`.
 
+## Who decides what happens
+
+Signed in, the browser never writes progress. It sends an action - "feed dragon
+X 50 food", "breed these two" - and the server loads the save it holds, decides
+whether that action is legal against **that** state, rolls any randomness with
+`crypto.getRandomValues`, stores the result and replies with the new save.
+
+Every mutation is named in `src/game/actions.ts`, and the same dispatcher runs
+in both places, so the rules cannot drift. Editing the page, overriding
+`Math.random` or replaying a request gets a player nothing: the server recomputes
+from its own copy.
+
+The saves table has row-level security on and **no policies at all**, so the
+anon key cannot read or write it. Only `/api/game`, using the service role key,
+can touch it.
+
+Designer actions - admin mode, granting dragons, skipping timers - are checked
+against `ADMIN_EMAILS` on the server. Hiding the Admin tab is a convenience;
+the refusal is what protects it.
+
+Local play, with no Supabase keys set, runs the same dispatcher in the browser
+against localStorage. Admin is open there because it is your own machine.
+
+### What this does not cover
+
+The content pack still ships to the browser, so a determined player can read
+every dragon, rule and weight out of the JavaScript bundle. Hiding that needs
+the pack kept server-side and only discovered species sent down - a separate
+change.
+
 ## Accounts
 
 Three ways in, all in the **Account** tab:
@@ -307,10 +337,11 @@ would lose a player's dragons the moment their address changed.
    the `saves` table and locks each row to its owner.
 3. In **Authentication -> Providers**, enable Email, Google, and Anonymous
    sign-ins.
-4. Copy `.env.example` to `.env.local` and fill in the two values from
-   **Project settings -> API**.
-5. In Vercel, add those same two variables under **Settings -> Environment
-   Variables**, then redeploy.
+4. Copy `.env.example` to `.env.local` and fill it in. Four variables now: the
+   two public ones, plus `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_EMAILS`, which
+   must NOT be prefixed with NEXT_PUBLIC.
+5. In Vercel, add all four under **Settings -> Environment Variables**, then
+   redeploy.
 
 Saves are one JSON blob per player, written a few seconds after any change, with
 row-level security so nobody can read another player's row. Because coins bank

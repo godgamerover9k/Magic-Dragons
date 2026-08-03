@@ -14,7 +14,7 @@ import type { Game } from "@/game/useGame";
 import { Button, Field, Panel, SectionHeading } from "./ui";
 
 export function AccountTab({ game }: { game: Game }) {
-  const { account, cloudEnabled, syncing, notify, refreshAccount } = game;
+  const { account, cloudEnabled, busy: syncing, notify } = game;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,6 @@ export function AccountTab({ game }: { game: Game }) {
     setBusy(true);
     try {
       await fn();
-      await refreshAccount();
       notify(success);
     } catch (err) {
       notify((err as Error).message, false);

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { buildPool } from "@/game/breeding";
 import { colorOf, formatDuration } from "@/game/economy";
-import { cancelBreeding, claimHatchling, nameOf, startBreeding } from "@/game/engine";
+import { nameOf } from "@/game/engine";
 import { HatchOverlay, type Hatched } from "./HatchOverlay";
 import { taxonPath } from "@/game/taxonomy";
 import type { Dragon } from "@/game/types";
@@ -11,7 +11,7 @@ import type { Game } from "@/game/useGame";
 import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function BreedTab({ game }: { game: Game }) {
-  const { pack, save, now, act, setSave, notify } = game;
+  const { pack, save, now, act } = game;
   const [hatched, setHatched] = useState<Hatched | null>(null);
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
@@ -31,17 +31,13 @@ export function BreedTab({ game }: { game: Game }) {
    * Hatching is handled here rather than through `act` so the new dragon can be
    * picked out of the result and shown before it disappears into the roost.
    */
-  const hatch = () => {
+  const hatch = async () => {
     const before = new Set(save.dragons.map((d) => d.id));
-    const result = claimHatchling(pack, save, Date.now());
-    if (!result.ok) {
-      notify(result.message, false);
-      return;
-    }
-    const born = result.save.dragons.find((d) => !before.has(d.id));
-    const isNew = born ? !save.discovered.includes(born.speciesId) : false;
-    setSave(result.save);
-    if (born) setHatched({ dragon: born, isNew });
+    const wasKnown = new Set(save.discovered);
+    const after = await act({ type: "hatch" }, true);
+    if (!after) return;
+    const born = after.dragons.find((d) => !before.has(d.id));
+    if (born) setHatched({ dragon: born, isNew: !wasKnown.has(born.speciesId) });
   };
 
   const nest = save.breeding;
@@ -80,7 +76,7 @@ export function BreedTab({ game }: { game: Game }) {
             >
               Hatch
             </Button>
-            <Button size="md" variant="danger" onClick={() => act(cancelBreeding)}>
+            <Button size="md" variant="danger" onClick={() => act({ type: "cancelBreeding" })}>
               Abandon
             </Button>
           </div>
@@ -159,7 +155,7 @@ export function BreedTab({ game }: { game: Game }) {
         disabled={!parentA || !parentB || save.dragons.length >= save.roostCapacity}
         onClick={() => {
           if (!parentA || !parentB) return;
-          act((s) => startBreeding(pack, s, parentA.id, parentB.id, Date.now()));
+          act({ type: "breed", parentA: parentA.id, parentB: parentB.id });
           setA(null);
           setB(null);
         }}

@@ -9,12 +9,7 @@ import {
   readyFood,
 } from "@/game/economy";
 import {
-  buildBakery,
   canAfford,
-  collectAllBatches,
-  collectBatch,
-  skipBaking,
-  startBatch,
 } from "@/game/engine";
 import type { Bakery } from "@/game/types";
 import type { Game } from "@/game/useGame";
@@ -35,7 +30,7 @@ export function BakeryTab({ game }: { game: Game }) {
         aside={
           <Button
             variant="solid"
-            onClick={() => act((s) => collectAllBatches(pack, s, Date.now()))}
+            onClick={() => act({ type: "collectAllBatches" })}
             disabled={waiting <= 0}
           >
             Collect {formatNumber(waiting)} food
@@ -65,7 +60,7 @@ export function BakeryTab({ game }: { game: Game }) {
           </div>
           <Button
             variant="solid"
-            onClick={() => act((s) => buildBakery(pack, s, Date.now()))}
+            onClick={() => act({ type: "buildBakery" })}
             disabled={!canAfford(save, cost)}
           >
             Build
@@ -104,7 +99,7 @@ function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }
                 type="button"
                 disabled={!affordable}
                 onClick={() =>
-                  act((s) => startBatch(pack, s, oven.id, option.id, Date.now()))
+                  act({ type: "startBatch", bakeryId: oven.id, batchId: option.id })
                 }
                 className="flex w-full items-center gap-3 rounded border border-line px-3 py-2 text-left transition-colors enabled:hover:border-verdigris disabled:opacity-35"
               >
@@ -156,12 +151,12 @@ function Oven({ oven, index, game }: { oven: Bakery; index: number; game: Game }
         <Button
           variant="solid"
           disabled={state !== "ready"}
-          onClick={() => act((s) => collectBatch(pack, s, oven.id, Date.now()))}
+          onClick={() => act({ type: "collectBatch", bakeryId: oven.id })}
         >
           Collect {formatNumber(batch?.food ?? 0)} food
         </Button>
         {save.adminMode && state === "baking" && (
-          <Button onClick={() => act((s) => skipBaking(s, oven.id, Date.now()))}>
+          <Button onClick={() => act({ type: "skipBaking", bakeryId: oven.id })}>
             Skip wait
           </Button>
         )}

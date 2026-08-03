@@ -4,7 +4,6 @@ import type {
   ContentPack,
   Dragon,
   FoodBatch,
-  ProductionFormula,
   SaveGame,
   Species,
 } from "./types";

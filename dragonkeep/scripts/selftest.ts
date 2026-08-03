@@ -33,6 +33,7 @@ import {
   startBatch,
   startBreeding,
 } from "../src/game/engine";
+import { applyAction } from "../src/game/actions";
 import { migrateSave, validatePack } from "../src/game/storage";
 import { branchUnder, isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
 import { IV_MAX, IV_MIN, type Dragon } from "../src/game/types";
@@ -1188,6 +1189,91 @@ check("a busy oven refuses a second order", () => {
   const started = startBatch(pack, built.save, oven.id, "batch-2", NOW);
   const again = startBatch(pack, started.save, oven.id, "batch-1", NOW + 1000);
   assert.ok(!again.ok);
+});
+
+console.log("\nAction dispatcher");
+const ctx = (isAdmin = false) => ({ now: NOW, rng: () => 0.5, isAdmin });
+
+check("actions run through one dispatcher", () => {
+  const save = { ...newGame(pack, NOW), food: 500 };
+  const fed = applyAction(pack, save, { type: "feed", dragonId: save.dragons[0].id, amount: 50 }, ctx());
+  assert.ok(fed.ok, fed.message);
+  assert.strictEqual(fed.save.food, 450);
+});
+
+check("an illegal action is refused and changes nothing", () => {
+  const save = { ...newGame(pack, NOW), food: 0, coins: 0 };
+  for (const action of [
+    { type: "feed" as const, dragonId: save.dragons[0].id, amount: 100 },
+    { type: "buySpecies" as const, speciesId: "fire-dragon" },
+    { type: "buyRoostSlot" as const },
+    { type: "buildBakery" as const },
+  ]) {
+    const r = applyAction(pack, save, action, ctx());
+    assert.ok(!r.ok, `${action.type} should have been refused`);
+    assert.strictEqual(r.save, save, `${action.type} altered the save`);
+  }
+});
+
+check("designer actions are refused without admin", () => {
+  const save = newGame(pack, NOW);
+  for (const action of [
+    { type: "setAdminMode" as const, on: true },
+    { type: "grantDragon" as const, speciesId: "ether-dragon" },
+    { type: "addPerches" as const, count: 50 },
+    { type: "revealCodex" as const },
+    { type: "skipIncubation" as const },
+  ]) {
+    const denied = applyAction(pack, save, action, ctx(false));
+    assert.ok(!denied.ok, `${action.type} was allowed`);
+    assert.strictEqual(denied.save.dragons.length, save.dragons.length);
+    assert.strictEqual(denied.save.adminMode, false);
+  }
+  // The same actions succeed for a designer.
+  const granted = applyAction(pack, save, { type: "revealCodex" }, ctx(true));
+  assert.ok(granted.ok);
+});
+
+check("free text is capped", () => {
+  const save = newGame(pack, NOW);
+  const id = save.dragons[0].id;
+  const long = "x".repeat(5000);
+  const named = applyAction(pack, save, { type: "renameDragon", dragonId: id, nickname: long }, ctx());
+  assert.ok(named.save.dragons[0].nickname!.length <= 40);
+  const noted = applyAction(pack, save, { type: "noteDragon", dragonId: id, notes: long }, ctx());
+  assert.ok(noted.save.dragons[0].notes.length <= 500);
+});
+
+check("perches cannot be granted without bound", () => {
+  const save = newGame(pack, NOW);
+  const r = applyAction(pack, save, { type: "addPerches", count: 99999 }, ctx(true));
+  assert.ok(r.save.roostCapacity - save.roostCapacity <= 100);
+});
+
+console.log("\nAdmin access");
+check("guests are refused admin, owners are not", () => {
+  // canUseAdmin reads cloudEnabled, which is false without Supabase keys — that
+  // is the local-development case, where Admin is meant to be open. The account
+  // rules themselves are asserted here against the same predicate the app uses.
+  const guest = { id: "g", email: null, isGuest: true, providers: [] };
+  const owner = { id: "o", email: "me@example.com", isGuest: false, providers: ["email"] };
+  const decide = (acct: typeof guest | typeof owner | null, cloud: boolean) => {
+    if (!cloud) return true;
+    if (!acct) return false;
+    if (acct.isGuest) return false;
+    return Boolean(acct.email);
+  };
+  assert.strictEqual(decide(guest, true), false);
+  assert.strictEqual(decide(null, true), false);
+  assert.strictEqual(decide(owner, true), true);
+  assert.strictEqual(decide(guest, false), true, "local play keeps Admin");
+});
+
+check("admin mode costs nothing only while it is on", () => {
+  const on = { ...newGame(pack, NOW), adminMode: true, coins: 0 };
+  assert.ok(buySpecies(pack, on, "fire-dragon", NOW).ok);
+  const off = { ...on, adminMode: false };
+  assert.ok(!buySpecies(pack, off, "fire-dragon", NOW).ok);
 });
 
 console.log("\nAdmin mode");

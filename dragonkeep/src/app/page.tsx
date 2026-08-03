@@ -10,16 +10,29 @@ import { MarketTab } from "@/components/MarketTab";
 import { RoostTab } from "@/components/RoostTab";
 import { Button } from "@/components/ui";
 import { formatNumber, pendingCoins, readyFood } from "@/game/economy";
-import { collectAllCoins } from "@/game/engine";
 import { useGame } from "@/game/useGame";
 
-const TABS = ["Roost", "Breed", "Bakery", "Market", "Codex", "Account", "Admin"] as const;
-type Tab = (typeof TABS)[number];
+const ALL_TABS = [
+  "Roost",
+  "Breed",
+  "Bakery",
+  "Market",
+  "Codex",
+  "Account",
+  "Admin",
+] as const;
+type Tab = (typeof ALL_TABS)[number];
 
 export default function Page() {
   const game = useGame();
   const [tab, setTab] = useState<Tab>("Roost");
-  const { pack, save, now, ready, toasts, act } = game;
+  const { pack, save, isAdmin, now, ready, toasts, act } = game;
+
+  const showAdmin = isAdmin;
+  const tabs = ALL_TABS.filter((t) => t !== "Admin" || showAdmin);
+  // Signing out of an owner account while sitting on Admin should not strand you
+  // on a blank tab.
+  const active: Tab = tab === "Admin" && !showAdmin ? "Roost" : tab;
 
   if (!ready || !save) {
     return (
@@ -65,7 +78,7 @@ export default function Page() {
               variant="solid"
               size="md"
               disabled={banked <= 0}
-              onClick={() => act((s) => collectAllCoins(pack, s, Date.now()))}
+              onClick={() => act({ type: "collectCoins" })}
             >
               Collect {formatNumber(banked)}
             </Button>
@@ -73,17 +86,17 @@ export default function Page() {
         </div>
 
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === t
+                active === t
                   ? "bg-verdigris/15 text-verdigris"
                   : "text-muted hover:text-bone"
               }`}
-              aria-current={tab === t ? "page" : undefined}
+              aria-current={active === t ? "page" : undefined}
             >
               {t}
             </button>
@@ -92,13 +105,13 @@ export default function Page() {
       </header>
 
       <div className="px-4 pt-4">
-        {tab === "Roost" && <RoostTab game={game} />}
-        {tab === "Breed" && <BreedTab game={game} />}
-        {tab === "Bakery" && <BakeryTab game={game} />}
-        {tab === "Market" && <MarketTab game={game} />}
-        {tab === "Codex" && <CodexTab game={game} />}
-        {tab === "Account" && <AccountTab game={game} />}
-        {tab === "Admin" && <AdminTab game={game} />}
+        {active === "Roost" && <RoostTab game={game} />}
+        {active === "Breed" && <BreedTab game={game} />}
+        {active === "Bakery" && <BakeryTab game={game} />}
+        {active === "Market" && <MarketTab game={game} />}
+        {active === "Codex" && <CodexTab game={game} />}
+        {active === "Account" && <AccountTab game={game} />}
+        {active === "Admin" && showAdmin && <AdminTab game={game} />}
       </div>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-1.5 px-4">
