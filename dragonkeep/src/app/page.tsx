@@ -6,6 +6,7 @@ import { AdminTab } from "@/components/AdminTab";
 import { BakeryTab } from "@/components/BakeryTab";
 import { BreedTab } from "@/components/BreedTab";
 import { CodexTab } from "@/components/CodexTab";
+import { LeaderboardTab } from "@/components/LeaderboardTab";
 import { MarketTab } from "@/components/MarketTab";
 import { RoostTab } from "@/components/RoostTab";
 import { Button } from "@/components/ui";
@@ -18,6 +19,7 @@ const ALL_TABS = [
   "Bakery",
   "Market",
   "Codex",
+  "Ranks",
   "Account",
   "Admin",
 ] as const;
@@ -125,6 +127,7 @@ export default function Page() {
         {active === "Bakery" && <BakeryTab game={game} />}
         {active === "Market" && <MarketTab game={game} />}
         {active === "Codex" && <CodexTab game={game} />}
+        {active === "Ranks" && <LeaderboardTab game={game} />}
         {active === "Account" && <AccountTab game={game} />}
         {active === "Admin" && showAdmin && <AdminTab game={game} />}
       </div>

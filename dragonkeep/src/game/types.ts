@@ -229,7 +229,9 @@ export interface BalanceConfig {
   defaultIncubationSeconds: number;
 
   maxBakeries: number;
-  /** Coin cost of the first bakery. */
+  /** Coin cost of the very first oven, kept low so a new keeper can reach it. */
+  firstBakeryCost: number;
+  /** Coin cost the ladder resumes at, for the second oven onwards. */
   bakeryCost: number;
   /** Each additional bakery costs this much more than the last. */
   bakeryCostGrowth: number;
@@ -277,6 +279,12 @@ export interface Dragon {
   /** 0-31, rolled fresh at birth and never inherited or changed. */
   iv: number;
 
+  /**
+   * Out of the roost and into storage. Stored dragons earn nothing — perches are
+   * the only thing that makes money — but storage is unlimited, so no dragon
+   * ever has to be turned away or released for want of room.
+   */
+  stored?: boolean;
   /** Locked dragons can never be consumed by a merge or sold. */
   locked: boolean;
   favorite: boolean;
@@ -320,6 +328,7 @@ export interface SaveGame {
   bakeries: Bakery[];
   breeding: BreedingSlot | null;
 
+  /** How many dragons can be perched at once. Storage beyond this is free. */
   roostCapacity: number;
   /**
    * Testing mode. Resources are treated as unlimited, the roost never fills,

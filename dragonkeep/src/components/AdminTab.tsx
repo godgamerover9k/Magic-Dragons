@@ -1321,7 +1321,8 @@ function BalanceEditor({
       {num("Starting perches", b.roostCapacity, (n) => set({ roostCapacity: n }))}
       {num("Perch cost", b.roostSlotCost, (n) => set({ roostSlotCost: n }), "Cost of the first extra perch.")}
       {num("Perch cost exponent", b.roostSlotCostExponent, (n) => set({ roostSlotCostExponent: n }), "Polynomial. 2 makes the nth perch cost n² times the first.", "0.1")}
-      {num("Bakery cost", b.bakeryCost, (n) => set({ bakeryCost: n }), "Cost of the first oven.")}
+      {num("First oven cost", b.firstBakeryCost, (n) => set({ firstBakeryCost: n }), "Kept low so a new keeper can afford one.")}
+      {num("Bakery cost", b.bakeryCost, (n) => set({ bakeryCost: n }), "Where the ladder resumes, for the second oven onwards.")}
       {num("Bakery cost multiplier", b.bakeryCostGrowth, (n) => set({ bakeryCostGrowth: n }), "Exponential. Each oven costs this many times the last.", "0.1")}
       {num("Coin storage hours", b.coinStorageHours, (n) => set({ coinStorageHours: n }))}
       {num("Levels per tier step", b.power.tierWeight, (n) => set({ power: { tierWeight: n } }), "How much power one tier is worth. 12 means a tier beats twelve levels.", "1")}

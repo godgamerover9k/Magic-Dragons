@@ -57,6 +57,8 @@ export function powerOf(pack: ContentPack, dragon: Dragon): number {
  * dragon never overtakes a fresh strong one.
  */
 export function coinsPerHour(pack: ContentPack, dragon: Dragon): number {
+  // A dragon in storage is kept, not worked. Only perches earn.
+  if (dragon.stored) return 0;
   const species = speciesOf(pack, dragon);
   if (!species) return 0;
 
@@ -115,6 +117,7 @@ export function pendingCoins(
   dragon: Dragon,
   now: number,
 ): number {
+  if (dragon.stored) return dragon.uncollectedCoins;
   const elapsed = Math.max(0, now - dragon.lastCollectedAt);
   const earned = (coinsPerHour(pack, dragon) * elapsed) / HOUR_MS;
   return Math.min(Math.floor(dragon.uncollectedCoins + earned), coinCap(pack, dragon));
@@ -241,8 +244,12 @@ export function ovenState(bakery: Bakery, now: number): OvenState {
  * or fourth oven is a genuine commitment rather than a rounding error.
  */
 export function nextBakeryCost(pack: ContentPack, owned: number): number {
+  // The first is deliberately cheap — a keeper who has just spent everything on
+  // their first dragon still needs a way to make food. After that the ordinary
+  // ladder resumes, starting where it always did.
+  if (owned === 0) return Math.round(pack.balance.firstBakeryCost);
   return Math.round(
-    pack.balance.bakeryCost * Math.pow(pack.balance.bakeryCostGrowth, owned),
+    pack.balance.bakeryCost * Math.pow(pack.balance.bakeryCostGrowth, owned - 1),
   );
 }
 

@@ -50,11 +50,14 @@ export async function signInWithEmail(email: string, password: string) {
   if (error) throw error;
 }
 
-export async function signInWithGoogle() {
+/** Providers offered on the account screen. Each needs enabling in Supabase. */
+export type OAuthProvider = "google" | "discord";
+
+export async function signInWithProvider(provider: OAuthProvider) {
   const client = supabase();
   if (!client) throw new Error("Cloud saves are not configured.");
   const { error } = await client.auth.signInWithOAuth({
-    provider: "google",
+    provider,
     options: { redirectTo: window.location.origin },
   });
   if (error) throw error;
@@ -71,11 +74,11 @@ export async function convertGuestToEmail(email: string, password: string) {
   if (error) throw error;
 }
 
-export async function convertGuestToGoogle() {
+export async function convertGuestToProvider(provider: OAuthProvider) {
   const client = supabase();
   if (!client) throw new Error("Cloud saves are not configured.");
   const { error } = await client.auth.linkIdentity({
-    provider: "google",
+    provider,
     options: { redirectTo: window.location.origin },
   });
   if (error) throw error;

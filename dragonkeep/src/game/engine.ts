@@ -43,9 +43,18 @@ function spend(save: SaveGame, coins = 0, food = 0): SaveGame {
   return { ...save, coins: save.coins - coins, food: save.food - food };
 }
 
-export function roostIsFull(save: SaveGame): boolean {
+/** Dragons currently earning, i.e. not in storage. */
+export function perchedCount(save: SaveGame): number {
+  return save.dragons.filter((d) => !d.stored).length;
+}
+
+/**
+ * True when every perch is taken. This no longer blocks anything — a new dragon
+ * simply arrives in storage — but it decides where one lands.
+ */
+export function perchesFull(save: SaveGame): boolean {
   if (save.adminMode) return false;
-  return save.dragons.length >= save.roostCapacity;
+  return perchedCount(save) >= save.roostCapacity;
 }
 
 let idCounter = 0;
@@ -144,11 +153,11 @@ export function settle(
   return {
     ...save,
     lastPlayedAt: now,
-    dragons: save.dragons.map((d) => ({
-      ...d,
-      uncollectedCoins: pendingCoins(pack, d, now),
-      lastCollectedAt: now,
-    })),
+    dragons: save.dragons.map((d) =>
+      d.stored
+        ? d
+        : { ...d, uncollectedCoins: pendingCoins(pack, d, now), lastCollectedAt: now },
+    ),
   };
 }
 
@@ -263,8 +272,6 @@ export function startBreeding(
   const a = save.dragons.find((d) => d.id === aId);
   const b = save.dragons.find((d) => d.id === bId);
   if (!a || !b) return fail(save, "Both parents must be in your roost.");
-  if (roostIsFull(save))
-    return fail(save, "The roost is full — no room for a hatchling.");
 
   const pool = buildPool(pack, a, b);
   const resultSpeciesId = rollPool(pool, rng());
@@ -299,14 +306,16 @@ export function claimHatchling(
   if (!nest) return fail(save, "There is no egg.");
   if (now < nest.readyAt && !save.adminMode)
     return fail(save, "The egg has not hatched yet.");
-  if (roostIsFull(save))
-    return fail(save, "The roost is full — free a slot before hatching.");
 
-  const hatchling = createDragon(pack, nest.resultSpeciesId, {
-    parentIds: [nest.parentA, nest.parentB],
-    now,
-    rng,
-  });
+  const stored = perchesFull(save);
+  const hatchling = {
+    ...createDragon(pack, nest.resultSpeciesId, {
+      parentIds: [nest.parentA, nest.parentB],
+      now,
+      rng,
+    }),
+    stored,
+  };
 
   const isNew = !save.discovered.includes(hatchling.speciesId);
 
@@ -332,9 +341,11 @@ export function claimHatchling(
       discovered: isNew ? [...save.discovered, hatchling.speciesId] : save.discovered,
     },
     ok: true,
-    message: isNew
-      ? `New to the codex — ${nameOf(pack, hatchling)}.`
-      : `Hatched ${nameOf(pack, hatchling)}.`,
+    message: stored
+      ? `Hatched ${nameOf(pack, hatchling)} — no free perch, so it went to storage.`
+      : isNew
+        ? `New to the codex — ${nameOf(pack, hatchling)}.`
+        : `Hatched ${nameOf(pack, hatchling)}.`,
   };
 }
 
@@ -407,9 +418,8 @@ export function buySpecies(
     return fail(save, "That dragon is not for sale.");
   if (!canAfford(save, species.marketPrice))
     return fail(save, `Costs ${species.marketPrice.toLocaleString()} coins.`);
-  if (roostIsFull(save)) return fail(save, "The roost is full.");
 
-  const dragon = createDragon(pack, speciesId, { now, rng });
+  const dragon = { ...createDragon(pack, speciesId, { now, rng }), stored: perchesFull(save) };
   const isNew = !save.discovered.includes(speciesId);
   return {
     save: {
@@ -418,7 +428,9 @@ export function buySpecies(
       discovered: isNew ? [...save.discovered, speciesId] : save.discovered,
     },
     ok: true,
-    message: `${species.name} joined the roost.`,
+    message: dragon.stored
+      ? `${species.name} bought — no free perch, so it went to storage.`
+      : `${species.name} joined the roost.`,
   };
 }
 
@@ -570,6 +582,41 @@ export function updateDragon(
   };
 }
 
+export function perchDragon(save: SaveGame, dragonId: string): ActionResult {
+  const dragon = save.dragons.find((d) => d.id === dragonId);
+  if (!dragon) return fail(save, "No such dragon.");
+  if (!dragon.stored) return fail(save, "It is already on a perch.");
+  if (perchesFull(save))
+    return fail(save, "Every perch is taken — store another dragon or buy a perch.");
+  return {
+    save: {
+      ...save,
+      dragons: save.dragons.map((d) =>
+        // The clock restarts: it earns from the moment it is put to work.
+        d.id === dragonId ? { ...d, stored: false, lastCollectedAt: Date.now() } : d,
+      ),
+    },
+    ok: true,
+    message: "Moved to a perch.",
+  };
+}
+
+export function storeDragon(save: SaveGame, dragonId: string): ActionResult {
+  const dragon = save.dragons.find((d) => d.id === dragonId);
+  if (!dragon) return fail(save, "No such dragon.");
+  if (dragon.stored) return fail(save, "It is already in storage.");
+  return {
+    save: {
+      ...save,
+      dragons: save.dragons.map((d) =>
+        d.id === dragonId ? { ...d, stored: true } : d,
+      ),
+    },
+    ok: true,
+    message: "Moved to storage. It earns nothing there.",
+  };
+}
+
 export function releaseDragon(
   pack: ContentPack,
   save: SaveGame,
@@ -599,7 +646,7 @@ export function grantDragon(
   now = Date.now(),
 ): ActionResult {
   if (!pack.species[speciesId]) return fail(save, "No such species.");
-  const dragon = createDragon(pack, speciesId, { now });
+  const dragon = { ...createDragon(pack, speciesId, { now }), stored: perchesFull(save) };
   const isNew = !save.discovered.includes(speciesId);
   return {
     save: {

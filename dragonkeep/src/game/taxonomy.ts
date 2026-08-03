@@ -13,8 +13,13 @@ export function childrenOf(pack: ContentPack, id: TaxonId): Taxon[] {
     .sort(byName);
 }
 
+/**
+ * Named branches sort before anonymous ones, so what a player has found sits at
+ * the top and the unknowns collect underneath. Within each group, by name.
+ */
 function byName(a: Taxon, b: Taxon) {
-  return a.name.localeCompare(b.name);
+  const known = (t: Taxon) => (t.name ? 0 : 1);
+  return known(a) - known(b) || a.name.localeCompare(b.name);
 }
 
 /** [self, parent, grandparent, ... root]. Cycle-safe. */

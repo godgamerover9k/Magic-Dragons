@@ -3,10 +3,10 @@
 import { useState } from "react";
 import {
   convertGuestToEmail,
-  convertGuestToGoogle,
+  convertGuestToProvider,
   signInAsGuest,
   signInWithEmail,
-  signInWithGoogle,
+  signInWithProvider,
   signOut,
   signUpWithEmail,
 } from "@/game/cloud";
@@ -115,9 +115,20 @@ export function AccountTab({ game }: { game: Game }) {
             </div>
           </div>
           <div className="mt-3 border-t border-line pt-3">
-            <Button disabled={busy} onClick={() => run(signInWithGoogle, "Opening Google…")}>
-              Continue with Google
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                disabled={busy}
+                onClick={() => run(() => signInWithProvider("google"), "Opening Google…")}
+              >
+                Continue with Google
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() => run(() => signInWithProvider("discord"), "Opening Discord…")}
+              >
+                Continue with Discord
+              </Button>
+            </div>
           </div>
         </Panel>
       </div>
@@ -152,8 +163,8 @@ export function AccountTab({ game }: { game: Game }) {
         <Panel className="p-4">
           <p className="font-display text-base">Keep this keeper permanently</p>
           <p className="mt-1.5 text-sm text-muted">
-            Adding an email or Google account to this guest keeps every dragon, coin and
-            codex entry exactly as it is. Nothing restarts.
+            Adding an email, Google or Discord account to this guest keeps every dragon,
+            coin and codex entry exactly as it is. Nothing restarts.
           </p>
 
           <div className="mt-3 space-y-2">
@@ -188,12 +199,20 @@ export function AccountTab({ game }: { game: Game }) {
           </div>
 
           <div className="mt-3 border-t border-line pt-3">
-            <Button
-              disabled={busy}
-              onClick={() => run(convertGuestToGoogle, "Opening Google…")}
-            >
-              Convert using Google
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                disabled={busy}
+                onClick={() => run(() => convertGuestToProvider("google"), "Opening Google…")}
+              >
+                Convert using Google
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() => run(() => convertGuestToProvider("discord"), "Opening Discord…")}
+              >
+                Convert using Discord
+              </Button>
+            </div>
           </div>
         </Panel>
       )}

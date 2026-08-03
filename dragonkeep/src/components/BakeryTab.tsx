@@ -22,6 +22,18 @@ export function BakeryTab({ game }: { game: Game }) {
   if (!save) return null;
 
   const waiting = readyFood(pack, save, now);
+
+  // Anything waiting on the player comes first: collect, then start, then the
+  // ones already busy. The label keeps each oven's original number so they do
+  // not appear to swap places.
+  const rank = { ready: 0, idle: 1, baking: 2 } as const;
+  const ordered = save.bakeries
+    .map((oven, index) => ({ oven, index }))
+    .sort(
+      (a, b) =>
+        rank[ovenState(a.oven, now)] - rank[ovenState(b.oven, now)] ||
+        a.index - b.index,
+    );
   const cost = nextBakeryCost(pack, save.bakeries.length);
   const canBuildMore = save.bakeries.length < pack.balance.maxBakeries || save.adminMode;
 
@@ -47,8 +59,8 @@ export function BakeryTab({ game }: { game: Game }) {
         />
       )}
 
-      {save.bakeries.map((oven, i) => (
-        <Oven key={oven.id} oven={oven} index={i} game={game} />
+      {ordered.map(({ oven, index }) => (
+        <Oven key={oven.id} oven={oven} index={index} game={game} />
       ))}
 
       {canBuildMore && (

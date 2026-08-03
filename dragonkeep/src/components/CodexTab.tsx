@@ -102,7 +102,12 @@ function Branch({
   const own = Object.values(pack.species).filter((s) => s.taxonId === taxon.id);
   const beneath = speciesInTaxon(pack, taxon.id);
   const found = beneath.filter((s) => save?.discovered.includes(s.id)).length;
-  const complete = beneath.length > 0 && found === beneath.length;
+  // The denominator is the real one, sent by the server — and only sent at all
+  // once something here has been found. A branch with nothing found shows no
+  // count, because the client was never told what it holds.
+  const totals = (pack as { branchTotals?: Record<string, number> }).branchTotals;
+  const total = totals?.[taxon.id];
+  const complete = total !== undefined && total > 0 && found === total;
   const known = found > 0;
 
   const expanded = open.has(taxon.id);
@@ -130,9 +135,9 @@ function Branch({
           >
             {known ? taxon.name : "———"}
           </span>
-          {beneath.length > 0 && (
+          {found > 0 && total !== undefined && (
             <span className="num ml-auto text-[11px] text-muted">
-              {found}/{beneath.length}
+              {found}/{total}
             </span>
           )}
         </div>

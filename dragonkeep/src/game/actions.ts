@@ -12,12 +12,14 @@ import {
   grantDragon,
   merge,
   newGame,
+  perchDragon,
   releaseDragon,
   setAdminMode,
   skipBaking,
   skipIncubation,
   startBatch,
   startBreeding,
+  storeDragon,
   updateDragon,
   type ActionResult,
 } from "./engine";
@@ -51,6 +53,8 @@ export type Action =
   | { type: "renameDragon"; dragonId: string; nickname: string | null }
   | { type: "noteDragon"; dragonId: string; notes: string }
   | { type: "lockDragon"; dragonId: string; locked: boolean }
+  | { type: "perchDragon"; dragonId: string }
+  | { type: "storeDragon"; dragonId: string }
   | { type: "releaseDragon"; dragonId: string }
   | { type: "restart" }
   // Admin only. The server refuses these outright for anyone else, so hiding
@@ -167,6 +171,12 @@ export function applyAction(
 
     case "lockDragon":
       return updateDragon(save, action.dragonId, { locked: Boolean(action.locked) });
+
+    case "perchDragon":
+      return done(perchDragon(save, action.dragonId));
+
+    case "storeDragon":
+      return done(storeDragon(save, action.dragonId));
 
     case "releaseDragon":
       return done(releaseDragon(pack, save, action.dragonId));

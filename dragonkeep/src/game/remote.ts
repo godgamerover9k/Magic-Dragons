@@ -97,3 +97,50 @@ export async function sendAction(action: Action): Promise<RemoteResult> {
     };
   }
 }
+
+export interface BoardReply {
+  entries: { rank: number; name: string; discovered: number; you?: boolean }[];
+  profile: {
+    displayName: string | null;
+    anonymous: boolean;
+    chosen: boolean;
+    discovered: number;
+    rank: number | null;
+  } | null;
+}
+
+export async function fetchLeaderboard(): Promise<BoardReply> {
+  const jwt = await token();
+  try {
+    const res = await fetch("/api/leaderboard", {
+      headers: jwt ? { authorization: `Bearer ${jwt}` } : undefined,
+      cache: "no-store",
+    });
+    if (!res.ok) return { entries: [], profile: null };
+    const body = await res.json();
+    return { entries: body.entries ?? [], profile: body.profile ?? null };
+  } catch {
+    return { entries: [], profile: null };
+  }
+}
+
+/** Answers the naming question. Anonymous is the default and the fallback. */
+export async function saveProfile(
+  anonymous: boolean,
+  displayName: string | null,
+): Promise<BoardReply> {
+  const jwt = await token();
+  if (!jwt) return { entries: [], profile: null };
+  try {
+    const res = await fetch("/api/profile", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ anonymous, displayName }),
+    });
+    if (!res.ok) return { entries: [], profile: null };
+    const body = await res.json();
+    return { entries: body.entries ?? [], profile: body.profile ?? null };
+  } catch {
+    return { entries: [], profile: null };
+  }
+}

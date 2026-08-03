@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 25,
+  "version": 26,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -687,7 +687,8 @@
         "food": 120000
       }
     ],
-    "xpPerFood": 1
+    "xpPerFood": 1,
+    "firstBakeryCost": 100
   },
   "custom": {}
 }

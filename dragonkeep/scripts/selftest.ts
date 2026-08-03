@@ -30,15 +30,18 @@ import {
   merge,
   newGame,
   pairKey,
+  perchedCount,
+  perchesFull,
   rollIv,
   setAdminMode,
   startBatch,
   startBreeding,
 } from "../src/game/engine";
 import { applyAction } from "../src/game/actions";
+import { cleanName, NAME_MAX } from "../src/game/leaderboard";
 import { redactPack } from "../src/game/redact";
 import { migrateSave, validatePack } from "../src/game/storage";
-import { branchUnder, isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
+import { branchUnder, childrenOf, isWithin, removeTaxon, roots, taxonPath } from "../src/game/taxonomy";
 import { IV_MAX, IV_MIN, type Dragon } from "../src/game/types";
 
 const pack = defaultContentPack();
@@ -1140,14 +1143,26 @@ check("perches grow polynomially", () => {
   );
 });
 
-check("bakeries grow exponentially", () => {
+check("the first oven is cheap, then the ladder resumes", () => {
   const costs = Array.from({ length: 5 }, (_, i) => nextBakeryCost(pack, i));
+  assert.strictEqual(costs[0], pack.balance.firstBakeryCost);
+  assert.strictEqual(costs[1], pack.balance.bakeryCost);
+  // From the second onwards it is a constant multiple, which is what perches
+  // deliberately are not.
   const growth = pack.balance.bakeryCostGrowth;
-  for (let i = 1; i < costs.length; i++) {
-    // A constant multiple every time, which is what perches deliberately are not.
+  for (let i = 2; i < costs.length; i++)
     assert.ok(Math.abs(costs[i] / costs[i - 1] - growth) < 0.01, `step ${i}`);
-  }
-  assert.strictEqual(costs[0], pack.balance.bakeryCost);
+});
+
+check("a new keeper can afford an oven before earning anything", () => {
+  // Spend everything on the first dragon, then still be able to make food.
+  const save = newGame(pack, NOW);
+  const bought = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx());
+  assert.strictEqual(bought.save.coins, 0);
+  const oven = nextBakeryCost(pack, 0);
+  const rate = coinsPerHour(pack, bought.save.dragons[0]);
+  // Within the hour, rather than a day.
+  assert.ok((oven / rate) * 60 < 60, `takes ${((oven / rate) * 60).toFixed(0)} minutes`);
 });
 
 check("bakeries outrun perches given enough of each", () => {
@@ -1243,6 +1258,26 @@ check("an egg in the nest counts as a way forward", () => {
   assert.strictEqual(ensureViable(pack, empty).coins, 0, "an egg is already a way out");
 });
 
+check("known branches sort above unknown ones", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  const walk = (parentId: string | null): void => {
+    const kids = Object.values(shown.taxa).filter((x) => x.parentId === parentId);
+    const ordered = childrenOf(shown, parentId ?? "");
+    if (parentId) {
+      const names = ordered.map((x) => Boolean(x.name));
+      // Once an unnamed branch appears, every one after it is unnamed too.
+      const firstUnknown = names.indexOf(false);
+      if (firstUnknown >= 0)
+        assert.ok(
+          names.slice(firstUnknown).every((named) => !named),
+          "a named branch sorted below an unknown one",
+        );
+    }
+    for (const kid of kids) walk(kid.id);
+  };
+  for (const root of roots(shown)) walk(root.id);
+});
+
 console.log("\nBreeding log");
 check("a hatch is recorded against the pairing", () => {
   const save = { ...seeded(), roostCapacity: 9 };
@@ -1270,6 +1305,23 @@ check("repeat hatches accumulate", () => {
   }
   const row = save.breedingLog![pairKey(a.speciesId, b.speciesId)];
   assert.strictEqual(Object.values(row).reduce((n, c) => n + c, 0), 5);
+});
+
+console.log("\nLeaderboard names");
+check("a name is trimmed rather than trusted", () => {
+  assert.strictEqual(cleanName("  Keeper of Ash  "), "Keeper of Ash");
+  assert.strictEqual(cleanName("many     spaces"), "many spaces");
+  assert.strictEqual(cleanName("x".repeat(200))!.length, NAME_MAX);
+});
+
+check("a name that is only whitespace or control codes falls back to anonymous", () => {
+  for (const raw of ["", "   ", "\u0000\u0001", "\n\t "])
+    assert.strictEqual(cleanName(raw), null, JSON.stringify(raw));
+});
+
+check("control characters are stripped from a real name", () => {
+  const cleaned = cleanName("Ash\u0000burn\u001f");
+  assert.strictEqual(cleaned, "Ashburn");
 });
 
 console.log("\nRedaction");
@@ -1312,6 +1364,39 @@ check("the shape of the tree is sent, the names are not", () => {
   }
   for (const hidden of ["transcendent", "duality", "physical", "special", "life", "hybrid"])
     assert.ok(!shown.taxa[hidden], `${hidden} kept its id`);
+});
+
+check("counts are real where they are given at all", () => {
+  const save = { ...newGame(pack, NOW), discovered: ["fire-dragon"] };
+  const shown = redactPack(pack, save, false);
+  const rootId = Object.values(shown.taxa).find((x) => x.parentId === null)!.id;
+  // The root covers every dragon in the game, not just the visible ones.
+  assert.strictEqual(shown.branchTotals[rootId], Object.keys(pack.species).length);
+  assert.strictEqual(shown.branchTotals["fire"], 2, "Fire holds two dragons");
+});
+
+check("a branch with nothing found is not counted at all", () => {
+  const save = { ...newGame(pack, NOW), discovered: ["fire-dragon"] };
+  const shown = redactPack(pack, save, false);
+
+  // Not zero, not omitted from the tree — simply never mentioned.
+  for (const id of ["earth", "water"])
+    assert.strictEqual(shown.branchTotals[id], undefined, `${id} leaked a count`);
+  for (const [id, taxon] of Object.entries(shown.taxa))
+    if (!taxon.name)
+      assert.strictEqual(shown.branchTotals[id], undefined, `${id} leaked a count`);
+
+  // Nothing at all is sent for a keeper who has found nothing.
+  const fresh = redactPack(pack, newGame(pack, NOW), false);
+  assert.deepStrictEqual(fresh.branchTotals, {});
+});
+
+check("finding something reveals its branch counts and no others", () => {
+  const save = { ...newGame(pack, NOW), discovered: ["fire-dragon", "perfection-dragon"] };
+  const shown = redactPack(pack, save, false);
+  assert.ok(shown.branchTotals["duality"] > 0, "the branch it sits in should count");
+  assert.ok(shown.branchTotals["transcendent"] > 0, "and the branch above");
+  assert.strictEqual(shown.branchTotals["physical"], undefined, "but not a sibling");
 });
 
 check("an anonymous branch has nothing in it to count", () => {
@@ -1421,12 +1506,12 @@ check("a stale admin flag is ignored for a non-designer", () => {
   assert.strictEqual(kept.save.adminMode, true);
 });
 
-check("a stale flag cannot skip timers or fill the roost", () => {
-  const stale = { ...seeded(), adminMode: true, roostCapacity: 2 };
-  const [a, b] = stale.dragons;
-  const bred = applyAction(pack, stale, { type: "breed", parentA: a.id, parentB: b.id }, ctx(false));
-  assert.ok(!bred.ok, "a full roost should have blocked this");
+check("a stale flag cannot skip timers or spend nothing", () => {
+  const stale = { ...seeded(), adminMode: true, coins: 0 };
+  const bought = applyAction(pack, stale, { type: "buySpecies", speciesId: "fire-dragon" }, ctx(false));
+  assert.ok(!bought.ok, "a stale flag paid for a dragon");
 
+  const [a, b] = stale.dragons;
   const withEgg = {
     ...stale,
     roostCapacity: 9,
@@ -1622,12 +1707,67 @@ check("breeding then hatching adds a dragon", () => {
   assert.deepStrictEqual(hatched.save.dragons[2].parentIds, [a.id, b.id]);
 });
 
-check("a full roost blocks breeding", () => {
+check("a full roost sends new dragons to storage rather than refusing", () => {
+  const save = { ...seeded(), roostCapacity: 2, coins: 100000 };
+  assert.strictEqual(perchedCount(save), 2);
+  assert.ok(perchesFull(save));
+
+  // Buying still works; the dragon simply lands in storage.
+  const bought = applyAction(pack, save, { type: "buySpecies", speciesId: "water-dragon" }, ctx());
+  assert.ok(bought.ok, bought.message);
+  const arrival = bought.save.dragons[bought.save.dragons.length - 1];
+  assert.strictEqual(arrival.stored, true);
+  assert.strictEqual(perchedCount(bought.save), 2, "it did not take a perch");
+});
+
+check("breeding is never blocked by a full roost", () => {
   const save = { ...seeded(), roostCapacity: 2 };
   const [a, b] = save.dragons;
-  const r = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1);
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  assert.ok(bred.ok, bred.message);
+  const hatched = applyAction(pack, bred.save, { type: "hatch" }, { ...ctx(), now: LATER });
+  assert.ok(hatched.ok, hatched.message);
+  assert.strictEqual(hatched.save.dragons[hatched.save.dragons.length - 1].stored, true);
+});
+
+check("only perched dragons earn", () => {
+  const save = seeded();
+  const working = save.dragons[0];
+  const idle = { ...save.dragons[1], stored: true };
+  assert.ok(coinsPerHour(pack, working) > 0);
+  assert.strictEqual(coinsPerHour(pack, idle), 0);
+  assert.strictEqual(pendingCoins(pack, idle, LATER), idle.uncollectedCoins);
+});
+
+check("storage is unlimited", () => {
+  let save = { ...seeded(["fire-dragon"]), roostCapacity: 1, coins: 10_000_000 };
+  for (let i = 0; i < 25; i++)
+    save = applyAction(pack, save, { type: "buySpecies", speciesId: "fire-dragon" }, ctx()).save;
+  assert.ok(save.dragons.length >= 25);
+  assert.strictEqual(perchedCount(save), 1);
+});
+
+check("moving between perch and storage", () => {
+  const save = { ...seeded(), roostCapacity: 2 };
+  const id = save.dragons[0].id;
+
+  const put = applyAction(pack, save, { type: "storeDragon", dragonId: id }, ctx());
+  assert.ok(put.ok, put.message);
+  assert.strictEqual(put.save.dragons.find((d) => d.id === id)!.stored, true);
+  assert.strictEqual(perchedCount(put.save), 1, "it freed a perch");
+
+  const back = applyAction(pack, put.save, { type: "perchDragon", dragonId: id }, ctx());
+  assert.ok(back.ok, back.message);
+  assert.ok(!back.save.dragons.find((d) => d.id === id)!.stored);
+});
+
+check("a dragon cannot be perched when every perch is taken", () => {
+  const save = { ...seeded(), roostCapacity: 1 };
+  const stored = { ...save.dragons[1], stored: true };
+  const full = { ...save, dragons: [save.dragons[0], stored] };
+  const r = applyAction(pack, full, { type: "perchDragon", dragonId: stored.id }, ctx());
   assert.ok(!r.ok);
-  assert.match(r.message, /full/);
+  assert.match(r.message, /perch/);
 });
 
 check("merging consumes exactly the required duplicates", () => {

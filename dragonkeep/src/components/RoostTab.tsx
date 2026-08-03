@@ -40,6 +40,8 @@ export function RoostTab({ game }: { game: Game }) {
 
   const slotCost = nextRoostSlotCost(pack, save.roostCapacity);
   const totalRate = save.dragons.reduce((n, d) => n + coinsPerHour(pack, d), 0);
+  const perched = sorted.filter((d) => !d.stored);
+  const stored = sorted.filter((d) => d.stored);
 
   return (
     <div className="space-y-3">
@@ -62,12 +64,16 @@ export function RoostTab({ game }: { game: Game }) {
 
       <StatStrip
         items={[
-          { label: "perches", value: `${save.dragons.length}/${save.roostCapacity}` },
+          {
+            label: "perches",
+            value: `${save.dragons.filter((d) => !d.stored).length}/${save.roostCapacity}`,
+          },
+          { label: "in storage", value: formatNumber(save.dragons.filter((d) => d.stored).length) },
           { label: "coins/hr", value: formatNumber(totalRate) },
         ]}
       />
 
-      {sorted.map((dragon) => (
+      {perched.map((dragon) => (
         <DragonCard
           key={dragon.id}
           dragon={dragon}
@@ -96,6 +102,24 @@ export function RoostTab({ game }: { game: Game }) {
 
       {save.dragons.length === 0 && (
         <Empty title="No dragons yet" body="Buy one in the Market to start the line." />
+      )}
+
+      {stored.length > 0 && (
+        <>
+          <SectionHeading label={`Storage · ${stored.length}`} />
+          <p className="px-1 text-[11px] text-muted">
+            Kept safe, earning nothing. Storage is unlimited — only perches make coins.
+          </p>
+          {stored.map((dragon) => (
+            <DragonCard
+              key={dragon.id}
+              dragon={dragon}
+              game={game}
+              open={openId === dragon.id}
+              onToggle={() => setOpenId(openId === dragon.id ? null : dragon.id)}
+            />
+          ))}
+        </>
       )}
 
       <p className="px-1 text-[11px] text-muted">
@@ -180,6 +204,7 @@ function DragonCard({
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             <Stat label="Experience" value={atMax ? "max level" : `${formatNumber(dragon.xp)} / ${formatNumber(need)}`} />
             <Stat label="Power" value={formatNumber(powerOf(pack, dragon))} />
+            <Stat label="Working" value={dragon.stored ? "in storage" : "on a perch"} />
             <Stat
               label="Capacity"
               value={
@@ -242,6 +267,18 @@ function DragonCard({
               >
                 Merge to tier {dragon.tier + 1}
               </Button>
+              {dragon.stored ? (
+                <Button
+                  variant="solid"
+                  onClick={() => act({ type: "perchDragon", dragonId: dragon.id })}
+                >
+                  Move to a perch
+                </Button>
+              ) : (
+                <Button onClick={() => act({ type: "storeDragon", dragonId: dragon.id })}>
+                  Put in storage
+                </Button>
+              )}
               <Button
                 onClick={() =>
                   act({ type: "lockDragon", dragonId: dragon.id, locked: !dragon.locked }, true)

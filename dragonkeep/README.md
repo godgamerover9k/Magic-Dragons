@@ -282,6 +282,44 @@ it can hold by more, so the gap between collections gets longer rather than
 shorter. Tuned with `capacity.levelCoefficient`, `capacity.levelExponent` and
 `capacity.tierMultiplier`.
 
+## The board
+
+**Ranks** lists the ten players who have discovered the most dragons. It lives in
+its own `profiles` table, kept in step on every save write, so the board can be
+served publicly without going near anyone's progress.
+
+Everyone starts anonymous. A player is asked once - and only if they reach the
+top ten - whether they would rather appear under a name. The answer is
+remembered so they are not asked again, and can be changed from the same tab.
+Names are stripped of control characters, collapsed whitespace and capped at 24
+characters; anything that comes out empty falls back to Anonymous.
+
+## Housekeeping
+
+A guest keeper is tied to one browser and cannot be signed back into, so one
+left untouched for a month is already gone from its owner's point of view.
+`/api/maintenance` removes those accounts and their saves. Named accounts are
+never touched, however long they sit.
+
+It runs daily at 04:00 UTC via `vercel.json`, authorised by `CRON_SECRET`.
+Without that secret the endpoint does nothing, so the public URL costs nothing.
+
+## Perches and storage
+
+A perch is a job. Storage is a shelf.
+
+- **Perches are limited** and are the only thing that earns. A dragon on a perch
+  banks coins; the roost's whole income is the sum of its perched dragons.
+- **Storage is unlimited** and earns nothing. A dragon there keeps its tier,
+  level and IV, and whatever it had already banked, indefinitely.
+
+Nothing is ever refused for want of room. Buy a dragon or hatch an egg with every
+perch taken and it arrives in storage, with the message saying so. Moving one
+back onto a perch restarts its earning clock.
+
+This means a player never has to release a dragon to make space, which was the
+one destructive choice the game used to force.
+
 ## Never stuck
 
 A keeper with no dragons and not enough coins to buy one has no way forward -

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { applyAction, withAdminChecked, type Action } from "@/game/actions";
 import { defaultContentPack } from "@/game/content";
 import { ensureViable, newGame, settle } from "@/game/engine";
+import { syncProfile } from "@/game/leaderboard";
 import { redactPack } from "@/game/redact";
 import { migrateSave } from "@/game/storage";
 import type { SaveGame } from "@/game/types";
@@ -54,6 +55,8 @@ async function storeSave(userId: string, save: SaveGame) {
       { user_id: userId, data: save, updated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     );
+  // The board is kept in step here rather than recomputed from saves later.
+  await syncProfile(userId, save);
 }
 
 export async function POST(request: Request) {

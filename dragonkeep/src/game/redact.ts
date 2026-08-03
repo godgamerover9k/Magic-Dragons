@@ -16,6 +16,15 @@ import type { ContentPack, SaveGame, SpeciesId, Taxon, TaxonId } from "./types";
 export interface RedactedPack extends ContentPack {
   /** How many dragons exist in total, so progress can be shown as "3 of 14". */
   totalSpecies: number;
+  /**
+   * How many dragons really sit beneath each branch, counted against the full
+   * pack rather than the slice sent down.
+   *
+   * Only present for branches the player has actually found something in. A
+   * branch they have never touched is not listed at all — telling them it holds
+   * three dragons is itself information they have not earned.
+   */
+  branchTotals: Record<TaxonId, number>;
   /** True when this is the whole pack, i.e. a designer or local play. */
   complete: boolean;
 }
@@ -52,7 +61,36 @@ export function redactPack(
 ): RedactedPack {
   const total = Object.keys(pack.species).length;
 
-  if (isAdmin) return { ...pack, totalSpecies: total, complete: true };
+  /**
+   * Real totals per branch, computed before anything is hidden — but withheld
+   * for any branch where nothing has been discovered yet.
+   */
+  const totals = (map: Map<TaxonId, TaxonId>, everything: boolean) => {
+    const counted: Record<TaxonId, number> = {};
+    const found: Record<TaxonId, number> = {};
+    const discovered = new Set(save?.discovered ?? []);
+
+    for (const species of Object.values(pack.species)) {
+      for (const node of ancestry(pack, species.taxonId)) {
+        const key = map.get(node.id) ?? node.id;
+        counted[key] = (counted[key] ?? 0) + 1;
+        if (discovered.has(species.id)) found[key] = (found[key] ?? 0) + 1;
+      }
+    }
+
+    if (everything) return counted;
+    return Object.fromEntries(
+      Object.entries(counted).filter(([key]) => (found[key] ?? 0) > 0),
+    );
+  };
+
+  if (isAdmin)
+    return {
+      ...pack,
+      totalSpecies: total,
+      branchTotals: totals(new Map(), true),
+      complete: true,
+    };
 
   const keepSpecies = visibleSpecies(pack, save);
   const named = visibleTaxa(pack, keepSpecies);
@@ -94,6 +132,7 @@ export function redactPack(
       startingSpecies: [],
     },
     totalSpecies: total,
+    branchTotals: totals(alias, false),
     complete: false,
   };
 }

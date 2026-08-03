@@ -40,11 +40,17 @@ export const EMPTY_PACK: RedactedPack = {
     parentWeight: 1,
     defaultIncubationSeconds: 0,
     maxBakeries: 0,
+    firstBakeryCost: 0,
     bakeryCost: 0,
     bakeryCostGrowth: 1,
     foodBatches: [],
   },
   custom: {},
   totalSpecies: 0,
+  branchTotals: {},
   complete: false,
-} satisfies ContentPack & { totalSpecies: number; complete: boolean };
+} satisfies ContentPack & {
+  totalSpecies: number;
+  branchTotals: Record<string, number>;
+  complete: boolean;
+};
