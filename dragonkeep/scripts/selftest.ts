@@ -29,7 +29,10 @@ import {
   feed,
   feedToNextLevel,
   merge,
+  nestCapacityOf,
+  nestsOf,
   newGame,
+  nextNestCost,
   pairKey,
   perchedCount,
   perchesFull,
@@ -203,6 +206,7 @@ check("base elements are their own branch inside Elemental", () => {
     "fire-dragon",
     "inferno-dragon",
     "metal-dragon",
+    "sand-dragon",
     "water-dragon",
   ]);
 });
@@ -473,6 +477,11 @@ check("fire and plant make inferno far more often than fire alone", () => {
   assert.ok(paired > alone * 10);
 });
 
+check("two flawless parents give about a one in five shot", () => {
+  const odds = combo("fire-dragon", "water-dragon", "perfection-dragon", 31);
+  assert.ok(odds > 0.17 && odds < 0.25, `odds were ${odds}`);
+});
+
 check("perfection needs two flawless parents", () => {
   assert.ok(combo("fire-dragon", "water-dragon", "perfection-dragon", 31) > 0);
   // One point short on both and it cannot happen at all.
@@ -556,6 +565,39 @@ check("life is a branch inside special", () => {
     Object.values(pack.species).filter((s) => s.taxonId === "special"),
     [],
   );
+});
+
+check("air and earth make sand", () => {
+  assert.ok(combo("air-dragon", "earth-dragon", "sand-dragon") > 0.17);
+  assert.strictEqual(combo("fire-dragon", "earth-dragon", "sand-dragon"), 0);
+  assert.strictEqual(combo("air-dragon", "water-dragon", "sand-dragon"), 0);
+});
+
+check("sand is an earth dragon", () => {
+  assert.strictEqual(pack.species["sand-dragon"].taxonId, "earth");
+  // Filed under Earth, so it is the same element as an Earth Dragon and the two
+  // cannot cross for an Elemental.
+  assert.strictEqual(combo("sand-dragon", "earth-dragon", "elemental-dragon"), 0);
+  assert.ok(combo("sand-dragon", "water-dragon", "elemental-dragon") > 0);
+});
+
+check("sand and anything in the fire branch makes glass", () => {
+  for (const id of ["fire-dragon", "inferno-dragon"])
+    assert.ok(combo("sand-dragon", id, "glass-dragon") > 0.17, `sand x ${id}`);
+});
+
+check("lava is a slimmer route to glass", () => {
+  const branch = combo("sand-dragon", "fire-dragon", "glass-dragon");
+  const viaLava = combo("sand-dragon", "lava-dragon", "glass-dragon");
+  assert.ok(viaLava > 0 && viaLava < 0.06, `lava odds were ${viaLava}`);
+  assert.ok(branch > viaLava * 4);
+});
+
+check("nothing else reaches glass", () => {
+  for (const id of Object.keys(pack.species)) {
+    if (["sand-dragon", "glass-dragon"].includes(id)) continue;
+    assert.strictEqual(combo("water-dragon", id, "glass-dragon"), 0, `water x ${id}`);
+  }
 });
 
 check("corruption and life make monster", () => {
@@ -1010,6 +1052,7 @@ check("an egg of a deleted dragon is cleared", () => {
   const withEgg = {
     ...save,
     breeding: {
+      id: "nest_test",
       parentA: a.id,
       parentB: b.id,
       startedAt: NOW,
@@ -1017,7 +1060,7 @@ check("an egg of a deleted dragon is cleared", () => {
       resultSpeciesId: "deleted-dragon",
     },
   };
-  assert.strictEqual(migrateSave(pack, withEgg).breeding, null);
+  assert.deepStrictEqual(migrateSave(pack, withEgg).nests, []);
 });
 
 check("an egg whose parents were dropped is cleared", () => {
@@ -1027,6 +1070,7 @@ check("an egg whose parents were dropped is cleared", () => {
     ...save,
     dragons: [...save.dragons, ghost],
     breeding: {
+      id: "nest_test",
       parentA: "ghost",
       parentB: save.dragons[1].id,
       startedAt: NOW,
@@ -1034,7 +1078,7 @@ check("an egg whose parents were dropped is cleared", () => {
       resultSpeciesId: "fire-dragon",
     },
   };
-  assert.strictEqual(migrateSave(pack, withEgg).breeding, null);
+  assert.deepStrictEqual(migrateSave(pack, withEgg).nests, []);
 });
 
 check("a real egg survives migration", () => {
@@ -1043,6 +1087,7 @@ check("a real egg survives migration", () => {
   const withEgg = {
     ...save,
     breeding: {
+      id: "nest_test",
       parentA: a.id,
       parentB: b.id,
       startedAt: NOW,
@@ -1050,7 +1095,7 @@ check("a real egg survives migration", () => {
       resultSpeciesId: "fire-dragon",
     },
   };
-  assert.ok(migrateSave(pack, withEgg).breeding);
+  assert.strictEqual(migrateSave(pack, withEgg).nests?.length, 1);
 });
 
 check("older saves are repaired rather than dropped", () => {
@@ -1115,7 +1160,7 @@ check("a dragon with no time set falls back to the default", () => {
 check("the egg timer matches the dragon inside it", () => {
   const save = { ...seeded(), roostCapacity: 9 };
   const [a, b] = save.dragons;
-  const nest = startBreeding(pack, save, a.id, b.id, NOW, () => 0.1).save.breeding!;
+  const nest = nestsOf(startBreeding(pack, save, a.id, b.id, NOW, () => 0.1).save)[0];
   assert.strictEqual(
     nest.readyAt - nest.startedAt,
     incubationSeconds(pack, nest.resultSpeciesId) * 1000,
@@ -1322,6 +1367,94 @@ check("repeat hatches accumulate", () => {
   }
   const row = save.breedingLog![pairKey(a.speciesId, b.speciesId)];
   assert.strictEqual(Object.values(row).reduce((n, c) => n + c, 0), 5);
+});
+
+console.log("\nNests");
+check("one nest to start, and it can only hold one egg", () => {
+  const save = { ...seeded(["fire-dragon", "earth-dragon", "water-dragon"]), roostCapacity: 9 };
+  assert.strictEqual(nestCapacityOf(pack, save), 1);
+  const [a, b, c] = save.dragons;
+  const first = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  assert.ok(first.ok, first.message);
+  const second = applyAction(pack, first.save, { type: "breed", parentA: b.id, parentB: c.id }, ctx());
+  assert.ok(!second.ok);
+  assert.match(second.message, /nest/);
+});
+
+check("a bought nest lets a second egg sit", () => {
+  const save = {
+    ...seeded(["fire-dragon", "earth-dragon", "water-dragon", "air-dragon"]),
+    roostCapacity: 9,
+    coins: 10_000_000,
+  };
+  const bought = applyAction(pack, save, { type: "buyNest" }, ctx());
+  assert.ok(bought.ok, bought.message);
+  assert.strictEqual(nestCapacityOf(pack, bought.save), 2);
+  assert.strictEqual(save.coins - bought.save.coins, nextNestCost(pack, 1));
+
+  const [a, b, c, d] = bought.save.dragons;
+  const one = applyAction(pack, bought.save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const two = applyAction(pack, one.save, { type: "breed", parentA: c.id, parentB: d.id }, ctx());
+  assert.ok(two.ok, two.message);
+  assert.strictEqual(nestsOf(two.save).length, 2);
+});
+
+check("nests get dearer each time", () => {
+  const costs = [1, 2, 3].map((owned) => nextNestCost(pack, owned));
+  for (let i = 1; i < costs.length; i++) assert.ok(costs[i] > costs[i - 1]);
+  assert.strictEqual(costs[0], pack.balance.nestCost);
+});
+
+check("a dragon cannot sit on two eggs at once", () => {
+  const save = {
+    ...seeded(["fire-dragon", "earth-dragon", "water-dragon"]),
+    roostCapacity: 9,
+    coins: 10_000_000,
+  };
+  const bought = applyAction(pack, save, { type: "buyNest" }, ctx());
+  const [a, b, c] = bought.save.dragons;
+  const one = applyAction(pack, bought.save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  const reuse = applyAction(pack, one.save, { type: "breed", parentA: a.id, parentB: c.id }, ctx());
+  assert.ok(!reuse.ok, "a parent was reused while sitting");
+});
+
+check("hatching names the nest it empties", () => {
+  const save = {
+    ...seeded(["fire-dragon", "earth-dragon", "water-dragon", "air-dragon"]),
+    roostCapacity: 9,
+    coins: 10_000_000,
+  };
+  const bought = applyAction(pack, save, { type: "buyNest" }, ctx());
+  const [a, b, c, d] = bought.save.dragons;
+  let current = applyAction(pack, bought.save, { type: "breed", parentA: a.id, parentB: b.id }, ctx()).save;
+  current = applyAction(pack, current, { type: "breed", parentA: c.id, parentB: d.id }, ctx()).save;
+
+  const second = nestsOf(current)[1];
+  const hatched = applyAction(pack, current, { type: "hatch", nestId: second.id }, { ...ctx(), now: LATER });
+  assert.ok(hatched.ok, hatched.message);
+  const left = nestsOf(hatched.save);
+  assert.strictEqual(left.length, 1);
+  assert.notStrictEqual(left[0].id, second.id);
+});
+
+check("an old single-slot save becomes a nest", () => {
+  const save = seeded();
+  const [a, b] = save.dragons;
+  const legacy = {
+    ...save,
+    nests: undefined,
+    breeding: {
+      id: "nest_1",
+      parentA: a.id,
+      parentB: b.id,
+      startedAt: NOW,
+      readyAt: NOW + 1000,
+      resultSpeciesId: "fire-dragon",
+    },
+  };
+  const migrated = migrateSave(pack, legacy);
+  assert.strictEqual(migrated.nests?.length, 1);
+  assert.strictEqual(migrated.breeding, null);
 });
 
 console.log("\nMarket limits");
@@ -1570,6 +1703,7 @@ check("a stale flag cannot skip timers or spend nothing", () => {
     ...stale,
     roostCapacity: 9,
     breeding: {
+      id: "nest_test",
       parentA: a.id,
       parentB: b.id,
       startedAt: NOW,
@@ -1660,6 +1794,23 @@ check("costs apply again once admin mode is off", () => {
 });
 
 console.log("\nActions");
+check("an egg cannot be abandoned", () => {
+  // The result is decided when the pair nests, so abandoning would have been a
+  // free reroll. There is no such action any more.
+  const save = { ...seeded(), roostCapacity: 9 };
+  const [a, b] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: a.id, parentB: b.id }, ctx());
+  assert.strictEqual(nestsOf(bred.save).length, 1);
+  const attempt = applyAction(
+    pack,
+    bred.save,
+    { type: "cancelBreeding" } as unknown as Parameters<typeof applyAction>[2],
+    ctx(true),
+  );
+  assert.ok(!attempt.ok, "cancelling was still possible");
+  assert.strictEqual(nestsOf(attempt.save).length, 1, "the egg survived");
+});
+
 check("a new keeper can afford exactly one Fire Dragon", () => {
   const save = newGame(pack, NOW);
   const price = pack.species["fire-dragon"].marketPrice!;

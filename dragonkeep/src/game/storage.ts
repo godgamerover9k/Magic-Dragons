@@ -70,20 +70,23 @@ export function migrateSave(pack: ContentPack, save: SaveGame): SaveGame {
   // An egg part-way through hatching something that no longer exists, or laid by
   // parents that have since been dropped, is cleared rather than left dangling.
   const ids = new Set(dragons.map((d) => d.id));
-  const breeding =
-    save.breeding &&
-    known(save.breeding.resultSpeciesId) &&
-    ids.has(save.breeding.parentA) &&
-    ids.has(save.breeding.parentB)
-      ? save.breeding
-      : null;
+  const legacy = save.breeding ? [{ ...save.breeding, id: save.breeding.id ?? "nest_1" }] : [];
+  // An empty array is not the same as "no nests field" — a save written before
+  // nests existed has an empty array and a populated `breeding`.
+  const source = save.nests && save.nests.length > 0 ? save.nests : legacy;
+  const nests = source.filter(
+    (nest) =>
+      known(nest.resultSpeciesId) && ids.has(nest.parentA) && ids.has(nest.parentB),
+  );
 
   return {
     ...save,
     schemaVersion: SCHEMA_VERSION,
     dragons,
     bakeries,
-    breeding,
+    nests,
+    breeding: null,
+    nestCapacity: save.nestCapacity ?? 1,
     discovered: (save.discovered ?? []).filter(known),
     adminMode: save.adminMode ?? false,
   };

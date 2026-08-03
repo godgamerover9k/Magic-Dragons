@@ -3,16 +3,23 @@
 import { useMemo, useState } from "react";
 import { buildPool } from "@/game/breeding";
 import { colorOf, formatDuration, formatNumber } from "@/game/economy";
-import { nameOf, pairKey } from "@/game/engine";
+import {
+  nameOf,
+  nestCapacityOf,
+  nestsOf,
+  nextNestCost,
+  pairKey,
+} from "@/game/engine";
 import { HatchOverlay, type Hatched } from "./HatchOverlay";
 import { taxonPath } from "@/game/taxonomy";
-import type { Dragon } from "@/game/types";
+import { IV_MAX, type Dragon } from "@/game/types";
 import type { Game } from "@/game/useGame";
 import { Button, Empty, Panel, SectionHeading } from "./ui";
 
 export function BreedTab({ game }: { game: Game }) {
   const { pack, save, now, act } = game;
   const [hatched, setHatched] = useState<Hatched | null>(null);
+  const [sort, setSort] = useState<"name" | "iv" | "ivLow">("name");
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
 
@@ -31,59 +38,26 @@ export function BreedTab({ game }: { game: Game }) {
    * Hatching is handled here rather than through `act` so the new dragon can be
    * picked out of the result and shown before it disappears into the roost.
    */
-  const hatch = async () => {
+  const hatch = async (nestId?: string) => {
     const before = new Set(save.dragons.map((d) => d.id));
     const wasKnown = new Set(save.discovered);
-    const after = await act({ type: "hatch" }, true);
+    const after = await act({ type: "hatch", nestId }, true);
     if (!after) return;
     const born = after.dragons.find((d) => !before.has(d.id));
     if (born) setHatched({ dragon: born, isNew: !wasKnown.has(born.speciesId) });
   };
 
-  const nest = save.breeding;
-  if (nest) {
-    const ready = now >= nest.readyAt;
-    const pa = save.dragons.find((d) => d.id === nest.parentA);
-    const pb = save.dragons.find((d) => d.id === nest.parentB);
-    return (
-      <div className="space-y-3">
-        {hatched && (
-          <HatchOverlay
-            pack={pack}
-            hatched={hatched}
-            onClose={() => setHatched(null)}
-          />
-        )}
-        <SectionHeading label="Nest" />
-        <Panel className="p-4 text-center">
-          <p className="eyebrow">
-            {pa ? nameOf(pack, pa) : "Unknown"} × {pb ? nameOf(pack, pb) : "Unknown"}
-          </p>
-          <p className="mt-2 font-display text-2xl">
-            {ready ? "The egg is ready" : formatDuration(nest.readyAt - now)}
-          </p>
-          <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
-            {ready
-              ? "What is inside was decided when the pair nested."
-              : "The result is already sealed. Waiting will not change it."}
-          </p>
-          <div className="mt-4 flex justify-center gap-2">
-            <Button
-              variant="solid"
-              size="md"
-              disabled={!ready}
-              onClick={hatch}
-            >
-              Hatch
-            </Button>
-            <Button size="md" variant="danger" onClick={() => act({ type: "cancelBreeding" })}>
-              Abandon
-            </Button>
-          </div>
-        </Panel>
-      </div>
-    );
-  }
+  const picker = [...save.dragons].sort((x, y) => {
+    if (sort === "iv") return (y.iv ?? 0) - (x.iv ?? 0);
+    if (sort === "ivLow") return (x.iv ?? 0) - (y.iv ?? 0);
+    return nameOf(pack, x).localeCompare(nameOf(pack, y));
+  });
+
+  const nests = nestsOf(save);
+  const capacity = nestCapacityOf(pack, save);
+  const full = nests.length >= capacity;
+  const nestPrice = nextNestCost(pack, capacity);
+  const canBuyNest = capacity < (pack.balance.maxNests ?? 1);
 
   const pick = (id: string) => {
     if (a === id) return setA(null);
@@ -104,7 +78,45 @@ export function BreedTab({ game }: { game: Game }) {
         />
       )}
 
+      {nests.length > 0 && (
+        <>
+          <SectionHeading label={`Nests · ${nests.length}/${capacity}`} />
+          {nests.map((nest) => {
+            const ready = now >= nest.readyAt;
+            const pa = save.dragons.find((d) => d.id === nest.parentA);
+            const pb = save.dragons.find((d) => d.id === nest.parentB);
+            return (
+              <Panel key={nest.id} className="p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="eyebrow truncate">
+                      {pa ? nameOf(pack, pa) : "Unknown"} ×{" "}
+                      {pb ? nameOf(pack, pb) : "Unknown"}
+                    </p>
+                    <p
+                      className="num mt-1 text-sm"
+                      style={{ color: ready ? "var(--color-verdigris)" : undefined }}
+                    >
+                      {ready ? "ready" : formatDuration(nest.readyAt - now)}
+                    </p>
+                  </div>
+                  <Button variant="solid" disabled={!ready} onClick={() => hatch(nest.id)}>
+                    Hatch
+                  </Button>
+                </div>
+              </Panel>
+            );
+          })}
+        </>
+      )}
+
       <SectionHeading label="Pairing" />
+
+      {full && (
+        <p className="rounded border border-line bg-panel px-3 py-2 text-[11px] text-muted">
+          Every nest is occupied. Hatch one, or buy another nest below.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Slot label="First parent" dragon={parentA} game={game} onClear={() => setA(null)} />
@@ -150,7 +162,7 @@ export function BreedTab({ game }: { game: Game }) {
         variant="solid"
         size="md"
         full
-        disabled={!parentA || !parentB || save.dragons.length >= save.roostCapacity}
+        disabled={!parentA || !parentB || full}
         onClick={() => {
           if (!parentA || !parentB) return;
           act({ type: "breed", parentA: parentA.id, parentB: parentB.id });
@@ -158,15 +170,48 @@ export function BreedTab({ game }: { game: Game }) {
           setB(null);
         }}
       >
-        {save.dragons.length >= save.roostCapacity ? "Roost is full" : "Breed"}
+        {full ? "Every nest is occupied" : "Breed"}
       </Button>
 
-      <SectionHeading label="Choose from the roost" />
+      {canBuyNest && (
+        <Panel className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm">Keep another nest</p>
+            <p className="text-xs text-muted">
+              A second egg can sit alongside the first.{" "}
+              <span className="num">{formatNumber(nestPrice)}</span> coins.
+            </p>
+          </div>
+          <Button
+            variant="solid"
+            onClick={() => act({ type: "buyNest" })}
+            disabled={save.coins < nestPrice}
+          >
+            Buy nest
+          </Button>
+        </Panel>
+      )}
+
+      <SectionHeading
+        label="Choose from the roost"
+        aside={
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as typeof sort)}
+            className="w-auto text-xs"
+            aria-label="Sort dragons"
+          >
+            <option value="name">Name</option>
+            <option value="iv">Highest IV</option>
+            <option value="ivLow">Lowest IV</option>
+          </select>
+        }
+      />
       {save.dragons.length < 2 ? (
         <Empty title="You need two dragons" body="Breeding takes a pair. Buy or hatch another first." />
       ) : (
         <div className="space-y-1.5">
-          {save.dragons.map((d) => {
+          {picker.map((d) => {
             const selected = d.id === a || d.id === b;
             const species = pack.species[d.speciesId];
             if (!species) return null;
@@ -189,8 +234,13 @@ export function BreedTab({ game }: { game: Game }) {
                     {taxonPath(pack, species.taxonId)}
                   </span>
                 </span>
-                <span className="num shrink-0 text-xs text-muted">
-                  T{d.tier} L{d.level}
+                <span className="shrink-0 text-right">
+                  <span className="num block text-xs text-muted">
+                    T{d.tier} L{d.level}
+                  </span>
+                  <span className="num block text-[11px]" style={{ color: ivTint(d.iv) }}>
+                    IV {d.iv}/{IV_MAX}
+                  </span>
                 </span>
               </button>
             );
@@ -223,6 +273,9 @@ function Slot({
             <span className="eyebrow" style={{ color: colorOf(pack, dragon.speciesId) }}>{pack.species[dragon.speciesId]?.name}</span>
             <span className="num text-[11px] text-muted">
               T{dragon.tier} L{dragon.level}
+            </span>
+            <span className="num text-[11px]" style={{ color: ivTint(dragon.iv) }}>
+              IV {dragon.iv}
             </span>
           </div>
           <Button variant="ghost" onClick={onClear}>
@@ -288,4 +341,14 @@ function PastResults({ game, a, b }: { game: Game; a: string; b: string }) {
       </p>
     </Panel>
   );
+}
+
+/**
+ * The two ends of the range are worth spotting at a glance — a pair of 31s or a
+ * pair of 0s opens a rule nothing else does. Everything between reads as muted.
+ */
+function ivTint(iv: number): string | undefined {
+  if (iv >= IV_MAX) return "var(--color-verdigris)";
+  if (iv <= 0) return "var(--color-warn)";
+  return "var(--color-muted)";
 }

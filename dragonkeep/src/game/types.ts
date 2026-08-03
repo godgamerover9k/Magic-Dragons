@@ -229,6 +229,13 @@ export interface BalanceConfig {
   defaultIncubationSeconds: number;
   /** How long the market withholds a dragon after one is bought. */
   marketCooldownSeconds: number;
+  /** Nests a keeper starts with. More can be bought. */
+  nestCapacity: number;
+  /** Coin cost of the second nest. */
+  nestCost: number;
+  /** Each nest after that costs this many times the last. */
+  nestCostGrowth: number;
+  maxNests: number;
 
   maxBakeries: number;
   /** Coin cost of the very first oven, kept low so a new keeper can reach it. */
@@ -308,6 +315,8 @@ export interface Bakery {
 }
 
 export interface BreedingSlot {
+  /** Which nest this egg is sitting in. */
+  id: string;
   parentA: string;
   parentB: string;
   /** Recorded at nesting, so the log survives a parent being released. */
@@ -328,7 +337,12 @@ export interface SaveGame {
 
   dragons: Dragon[];
   bakeries: Bakery[];
-  breeding: BreedingSlot | null;
+  /** Eggs currently sitting. One per nest. */
+  nests?: BreedingSlot[];
+  /** How many can sit at once. */
+  nestCapacity?: number;
+  /** Superseded by `nests`; kept so older saves can be read. */
+  breeding?: BreedingSlot | null;
 
   /** How many dragons can be perched at once. Storage beyond this is free. */
   roostCapacity: number;

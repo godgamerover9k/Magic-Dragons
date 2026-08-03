@@ -1,8 +1,8 @@
 import {
   buildBakery,
+  buyNest,
   buyRoostSlot,
   buySpecies,
-  cancelBreeding,
   claimHatchling,
   collectAllBatches,
   collectAllCoins,
@@ -41,8 +41,8 @@ export type Action =
   | { type: "feed"; dragonId: string; amount: number }
   | { type: "feedToNextLevel"; dragonId: string }
   | { type: "breed"; parentA: string; parentB: string }
-  | { type: "hatch" }
-  | { type: "cancelBreeding" }
+  | { type: "hatch"; nestId?: string }
+  | { type: "buyNest" }
   | { type: "merge"; dragonId: string }
   | { type: "buySpecies"; speciesId: string }
   | { type: "buyRoostSlot" }
@@ -133,10 +133,11 @@ export function applyAction(
       return done(startBreeding(pack, save, action.parentA, action.parentB, now, rng));
 
     case "hatch":
-      return done(claimHatchling(pack, save, now, rng));
+      return done(claimHatchling(pack, save, now, rng, action.nestId));
 
-    case "cancelBreeding":
-      return done(cancelBreeding(save));
+    case "buyNest":
+      return done(buyNest(pack, save));
+
 
     case "merge":
       return done(merge(pack, save, action.dragonId));

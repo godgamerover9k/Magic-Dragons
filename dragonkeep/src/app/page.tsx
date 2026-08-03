@@ -11,6 +11,7 @@ import { MarketTab } from "@/components/MarketTab";
 import { RoostTab } from "@/components/RoostTab";
 import { Button } from "@/components/ui";
 import { formatNumber, ovenState, pendingCoins, readyFood } from "@/game/economy";
+import { nestCapacityOf, nestsOf } from "@/game/engine";
 import { useGame } from "@/game/useGame";
 
 const ALL_TABS = [
@@ -66,6 +67,13 @@ export default function Page() {
   // earning nothing. Worth a mark on the tab rather than a trip to check.
   const ovenNeedsYou = save.bakeries.some((oven) => ovenState(oven, now) !== "baking");
 
+  // The nest wants you when an egg has hatched, or when nothing is nesting and
+  // there are two dragons to pair.
+  const nests = nestsOf(save);
+  const nestNeedsYou =
+    nests.some((nest) => now >= nest.readyAt) ||
+    (nests.length < nestCapacityOf(pack, save) && save.dragons.length >= 2);
+
   return (
     <main className="mx-auto min-h-dvh max-w-2xl overflow-x-hidden pb-24">
       <header className="sticky top-0 z-20 border-b border-line bg-ink/95 backdrop-blur">
@@ -120,10 +128,15 @@ export default function Page() {
               aria-current={active === t ? "page" : undefined}
             >
               {t}
-              {t === "Bakery" && ovenNeedsYou && (
+              {((t === "Bakery" && ovenNeedsYou) ||
+                (t === "Breed" && nestNeedsYou)) && (
                 <span
-                  aria-label="An oven is not working"
-                  title="An oven is idle or waiting to be collected"
+                  aria-label="Waiting on you"
+                  title={
+                    t === "Bakery"
+                      ? "An oven is idle or waiting to be collected"
+                      : "An egg is ready, or a pair is free to nest"
+                  }
                   className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
                   style={{ background: "var(--color-warn)" }}
                 />

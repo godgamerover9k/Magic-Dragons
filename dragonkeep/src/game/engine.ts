@@ -16,7 +16,7 @@ import {
   pendingCoins,
 } from "./economy";
 import { IV_MAX } from "./types";
-import type { ContentPack, Dragon, SaveGame, SpeciesId } from "./types";
+import type { BreedingSlot, ContentPack, Dragon, SaveGame, SpeciesId } from "./types";
 
 export interface ActionResult {
   save: SaveGame;
@@ -112,8 +112,14 @@ export function createDragon(
  * change. Rather than let that happen, the purse is topped up to the price of
  * the cheapest dragon on sale.
  */
+/** Eggs currently sitting, tolerating saves written before nests existed. */
+export function nestsOf(save: SaveGame): BreedingSlot[] {
+  if (save.nests) return save.nests;
+  return save.breeding ? [{ ...save.breeding, id: save.breeding.id ?? "nest_1" }] : [];
+}
+
 export function ensureViable(pack: ContentPack, save: SaveGame): SaveGame {
-  if (save.dragons.length > 0 || save.breeding) return save;
+  if (save.dragons.length > 0 || nestsOf(save).length > 0) return save;
 
   const prices = Object.values(pack.species)
     .filter((s) => s.obtainable && s.marketPrice && s.marketPrice > 0)
@@ -138,7 +144,8 @@ export function newGame(pack: ContentPack, now = Date.now()): SaveGame {
     food: pack.balance.startingFood,
     dragons,
     bakeries: [],
-    breeding: null,
+    nests: [],
+    nestCapacity: pack.balance.nestCapacity ?? 1,
     roostCapacity: pack.balance.roostCapacity,
     adminMode: false,
     discovered: [...new Set(dragons.map((d) => d.speciesId))],
@@ -261,6 +268,32 @@ export function feedToNextLevel(
 
 // --- Breeding --------------------------------------------------------------
 
+export function nestCapacityOf(pack: ContentPack, save: SaveGame): number {
+  return save.nestCapacity ?? pack.balance.nestCapacity ?? 1;
+}
+
+/** Coin cost of the next nest, given how many are already owned. */
+export function nextNestCost(pack: ContentPack, owned: number): number {
+  const base = pack.balance.nestCost ?? 0;
+  const growth = pack.balance.nestCostGrowth ?? 1;
+  const extra = Math.max(0, owned - (pack.balance.nestCapacity ?? 1));
+  return Math.round(base * Math.pow(growth, extra));
+}
+
+export function buyNest(pack: ContentPack, save: SaveGame): ActionResult {
+  const owned = nestCapacityOf(pack, save);
+  if (owned >= (pack.balance.maxNests ?? 1) && !save.adminMode)
+    return fail(save, "You have all the nests you can keep.");
+  const cost = nextNestCost(pack, owned);
+  if (!canAfford(save, cost))
+    return fail(save, `A nest costs ${cost.toLocaleString()} coins.`);
+  return {
+    save: { ...spend(save, cost), nestCapacity: owned + 1 },
+    ok: true,
+    message: `You keep ${owned + 1} nests now.`,
+  };
+}
+
 export function startBreeding(
   pack: ContentPack,
   save: SaveGame,
@@ -269,8 +302,12 @@ export function startBreeding(
   now = Date.now(),
   rng: () => number = Math.random,
 ): ActionResult {
-  if (save.breeding) return fail(save, "A pairing is already under way.");
+  const nests = nestsOf(save);
+  if (nests.length >= nestCapacityOf(pack, save))
+    return fail(save, "Every nest is occupied.");
   if (aId === bId) return fail(save, "Pick two different dragons.");
+  if (nests.some((n) => [n.parentA, n.parentB].includes(aId) || [n.parentA, n.parentB].includes(bId)))
+    return fail(save, "One of those is already sitting on an egg.");
   const a = save.dragons.find((d) => d.id === aId);
   const b = save.dragons.find((d) => d.id === bId);
   if (!a || !b) return fail(save, "Both parents must be in your roost.");
@@ -284,14 +321,19 @@ export function startBreeding(
   return {
     save: {
       ...save,
-      breeding: {
-        parentA: aId,
-        parentB: bId,
-        parentSpecies: [a.speciesId, b.speciesId],
-        startedAt: now,
-        readyAt: now + seconds * 1000,
-        resultSpeciesId,
-      },
+      breeding: null,
+      nests: [
+        ...nests,
+        {
+          id: newId("n"),
+          parentA: aId,
+          parentB: bId,
+          parentSpecies: [a.speciesId, b.speciesId],
+          startedAt: now,
+          readyAt: now + seconds * 1000,
+          resultSpeciesId,
+        },
+      ],
     },
     ok: true,
     message: seconds > 0 ? "The pair has nested." : "An egg is ready.",
@@ -303,8 +345,10 @@ export function claimHatchling(
   save: SaveGame,
   now = Date.now(),
   rng: () => number = Math.random,
+  nestId?: string,
 ): ActionResult {
-  const nest = save.breeding;
+  const nests = nestsOf(save);
+  const nest = nestId ? nests.find((n) => n.id === nestId) : nests[0];
   if (!nest) return fail(save, "There is no egg.");
   if (now < nest.readyAt && !save.adminMode)
     return fail(save, "The egg has not hatched yet.");
@@ -338,6 +382,7 @@ export function claimHatchling(
     save: {
       ...save,
       breeding: null,
+      nests: nests.filter((n) => n.id !== nest.id),
       breedingLog: log,
       dragons: [...save.dragons, hatchling],
       discovered: isNew ? [...save.discovered, hatchling.speciesId] : save.discovered,
@@ -351,19 +396,15 @@ export function claimHatchling(
   };
 }
 
-export function cancelBreeding(save: SaveGame): ActionResult {
-  if (!save.breeding) return fail(save, "There is no pairing to cancel.");
-  return { save: { ...save, breeding: null }, ok: true, message: "Pairing cancelled." };
-}
-
 /** Admin only — drops the remaining wait on an egg. */
 export function skipIncubation(save: SaveGame, now = Date.now()): ActionResult {
   if (!save.adminMode) return fail(save, "Only available in admin mode.");
-  if (!save.breeding) return fail(save, "There is no egg.");
+  const nests = nestsOf(save);
+  if (nests.length === 0) return fail(save, "There is no egg.");
   return {
-    save: { ...save, breeding: { ...save.breeding, readyAt: now } },
+    save: { ...save, breeding: null, nests: nests.map((n) => ({ ...n, readyAt: now })) },
     ok: true,
-    message: "Egg ready.",
+    message: "Eggs ready.",
   };
 }
 

@@ -1332,6 +1332,10 @@ function BalanceEditor({
       {num("XP base", b.levelXpBase, (n) => set({ levelXpBase: n }))}
       {num("XP exponent", b.levelXpExponent, (n) => set({ levelXpExponent: n }), "How fast levels get expensive.", "0.05")}
       {num("Max bakeries", b.maxBakeries, (n) => set({ maxBakeries: n }))}
+      {num("Starting nests", b.nestCapacity, (n) => set({ nestCapacity: n }))}
+      {num("Nest cost", b.nestCost, (n) => set({ nestCost: n }), "Cost of the second nest.")}
+      {num("Nest cost multiplier", b.nestCostGrowth, (n) => set({ nestCostGrowth: n }), "Each nest costs this many times the last.", "0.5")}
+      {num("Max nests", b.maxNests, (n) => set({ maxNests: n }))}
     </div>
   );
 }

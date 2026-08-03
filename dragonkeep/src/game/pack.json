@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "version": 29,
+  "version": 32,
   "name": "Elemental placeholder set",
   "taxa": {
     "dragon": {
@@ -303,6 +303,34 @@
       "tags": [],
       "description": "",
       "custom": {}
+    },
+    "sand-dragon": {
+      "id": "sand-dragon",
+      "name": "Sand Dragon",
+      "taxonId": "earth",
+      "color": "#D8C48A",
+      "baseProduction": 450,
+      "incubationSeconds": 9000,
+      "coinStorageHours": 0.5,
+      "xpMultiplier": 1.3,
+      "obtainable": true,
+      "tags": [],
+      "description": "",
+      "custom": {}
+    },
+    "glass-dragon": {
+      "id": "glass-dragon",
+      "name": "Glass Dragon",
+      "taxonId": "hybrid",
+      "color": "#A8D8DE",
+      "baseProduction": 1100,
+      "incubationSeconds": 28800,
+      "coinStorageHours": 0.65,
+      "xpMultiplier": 1.6,
+      "obtainable": true,
+      "tags": [],
+      "description": "",
+      "custom": {}
     }
   },
   "iv": {
@@ -446,11 +474,11 @@
       "outcomes": [
         {
           "speciesId": "perfection-dragon",
-          "weight": 100
+          "weight": 34
         }
       ],
       "enabled": true,
-      "notes": "Both parents at a perfect 31. Reaching that at all is the hard part, so the odds here are generous.",
+      "notes": "Both parents at a perfect 31. Around one breed in five.",
       "conditions": {
         "minIv": 31
       }
@@ -602,6 +630,67 @@
       },
       "enabled": true,
       "notes": "Both parents must be filed under Base Elements, in different elements. Two dragons from the same element - Fire and Inferno, say - are turned away."
+    },
+    {
+      "id": "rule-sand",
+      "label": "Air and Earth",
+      "a": {
+        "kind": "species",
+        "speciesId": "air-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "earth-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "sand-dragon",
+          "weight": 26
+        }
+      ],
+      "enabled": true,
+      "notes": "Sand is filed under Earth, so it counts as an earth dragon for anything matching that branch."
+    },
+    {
+      "id": "rule-glass",
+      "label": "Sand and fire",
+      "a": {
+        "kind": "species",
+        "speciesId": "sand-dragon"
+      },
+      "b": {
+        "kind": "taxon",
+        "taxonId": "fire",
+        "includeDescendants": true
+      },
+      "outcomes": [
+        {
+          "speciesId": "glass-dragon",
+          "weight": 26
+        }
+      ],
+      "enabled": true,
+      "notes": "Anything in the Fire branch will do \u2014 a Fire Dragon or an Inferno."
+    },
+    {
+      "id": "rule-glass-lava",
+      "label": "Sand and Lava",
+      "a": {
+        "kind": "species",
+        "speciesId": "sand-dragon"
+      },
+      "b": {
+        "kind": "species",
+        "speciesId": "lava-dragon"
+      },
+      "outcomes": [
+        {
+          "speciesId": "glass-dragon",
+          "weight": 4
+        }
+      ],
+      "enabled": true,
+      "notes": "Lava sits outside the Fire branch, so it gets its own slimmer route."
     }
   ],
   "balance": {
@@ -647,49 +736,53 @@
       {
         "id": "batch-2",
         "name": "Small Order",
-        "coinCost": 1350,
+        "coinCost": 120,
         "seconds": 600,
         "food": 80
       },
       {
         "id": "batch-3",
         "name": "Standing Order",
-        "coinCost": 8100,
+        "coinCost": 1300,
         "seconds": 3600,
         "food": 600
       },
       {
         "id": "batch-4",
         "name": "Banquet",
-        "coinCost": 45000,
+        "coinCost": 14000,
         "seconds": 21600,
         "food": 4500
       },
       {
         "id": "batch-5",
         "name": "Harvest",
-        "coinCost": 260000,
+        "coinCost": 54000,
         "seconds": 43200,
         "food": 12000
       },
       {
         "id": "batch-6",
         "name": "Granary Run",
-        "coinCost": 1500000,
+        "coinCost": 208000,
         "seconds": 86400,
         "food": 32000
       },
       {
         "id": "batch-7",
         "name": "Season's Stores",
-        "coinCost": 9000000,
+        "coinCost": 1000000,
         "seconds": 259200,
         "food": 120000
       }
     ],
     "xpPerFood": 1,
     "firstBakeryCost": 100,
-    "marketCooldownSeconds": 43200
+    "marketCooldownSeconds": 43200,
+    "nestCapacity": 1,
+    "nestCost": 25000,
+    "nestCostGrowth": 5,
+    "maxNests": 4
   },
   "custom": {}
 }

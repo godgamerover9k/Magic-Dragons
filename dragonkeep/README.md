@@ -307,6 +307,13 @@ never touched, however long they sit.
 It runs daily at 04:00 UTC via `vercel.json`, authorised by `CRON_SECRET`.
 Without that secret the endpoint does nothing, so the public URL costs nothing.
 
+## Nests
+
+A keeper starts with one nest and can buy more, at 25,000 coins for the second
+and five times that each time after. Each nest holds one egg, a parent cannot
+sit on two at once, and an egg cannot be abandoned - the result is decided when
+the pair nests, so abandoning would be a free reroll.
+
 ## Perches and storage
 
 A perch is a job. Storage is a shelf.
