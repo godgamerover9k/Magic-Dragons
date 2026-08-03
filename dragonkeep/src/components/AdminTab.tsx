@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { defaultContentPack } from "@/game/content";
 import {
   buildPool,
   conditionsMet,
@@ -47,11 +46,15 @@ function uniqueId(base: string, taken: Record<string, unknown>) {
 }
 
 export function AdminTab({ game }: { game: Game }) {
-  const { pack, setPack, save, act, notify, resetEverything } = game;
+  const { pack, setPack, save, act, notify, reload } = game;
   const issues = useMemo(() => validatePack(pack), [pack]);
   if (!save) return null;
 
-  const edit = (fn: (draft: ContentPack) => ContentPack) => setPack(fn(pack));
+  // Content edits are local to this browser: they change what the designer sees
+  // and what "Download content pack" produces. Shipping them means replacing
+  // pack.json in the repo.
+  const edit = (fn: (draft: ContentPack) => ContentPack) =>
+    setPack({ ...pack, ...fn(pack) });
 
   return (
     <div className="space-y-3">
@@ -109,7 +112,7 @@ export function AdminTab({ game }: { game: Game }) {
                 const loaded = await readJsonFile<ContentPack>(file);
                 if (!loaded.species || !loaded.taxa)
                   throw new Error("That file is not a content pack.");
-                setPack(loaded);
+                setPack({ ...pack, ...loaded });
                 notify("Content pack loaded.");
               } catch (err) {
                 notify((err as Error).message, false);
@@ -119,22 +122,8 @@ export function AdminTab({ game }: { game: Game }) {
           <Button onClick={() => downloadJson("dragonkeep-save.json", save)}>
             Download save
           </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (confirm("Replace the current pack with the base set? Your progress is kept."))
-                setPack(defaultContentPack());
-            }}
-          >
-            Restore base set
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (confirm("Wipe progress AND content? This cannot be undone.")) resetEverything();
-            }}
-          >
-            Reset everything
+          <Button variant="danger" onClick={() => void reload()}>
+            Discard local edits
           </Button>
         </div>
       </Section>

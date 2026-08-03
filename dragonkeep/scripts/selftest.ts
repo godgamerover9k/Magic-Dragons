@@ -34,6 +34,7 @@ import {
   startBreeding,
 } from "../src/game/engine";
 import { applyAction } from "../src/game/actions";
+import { redactPack } from "../src/game/redact";
 import { migrateSave, validatePack } from "../src/game/storage";
 import { branchUnder, isWithin, removeTaxon, taxonPath } from "../src/game/taxonomy";
 import { IV_MAX, IV_MIN, type Dragon } from "../src/game/types";
@@ -1191,6 +1192,62 @@ check("a busy oven refuses a second order", () => {
   assert.ok(!again.ok);
 });
 
+console.log("\nRedaction");
+check("an unknown dragon is not sent to the client", () => {
+  const save = newGame(pack, NOW);
+  const shown = redactPack(pack, save, false);
+  // Starters and anything on sale are visible; nothing else is.
+  for (const id of ["life-dragon", "monster-dragon", "perfection-dragon", "ether-dragon"])
+    assert.ok(!shown.species[id], `${id} leaked`);
+  for (const id of save.discovered) assert.ok(shown.species[id], `${id} should be visible`);
+});
+
+check("the shop stays visible", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  for (const s of Object.values(pack.species))
+    if (s.marketPrice) assert.ok(shown.species[s.id], `${s.name} vanished from the market`);
+});
+
+check("no breeding rule ever reaches an ordinary player", () => {
+  for (const save of [null, newGame(pack, NOW)]) {
+    const shown = redactPack(pack, save, false);
+    assert.deepStrictEqual(shown.breedingRules, []);
+    assert.deepStrictEqual(shown.balance.startingSpecies, []);
+  }
+});
+
+check("undiscovered branches are withheld", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  for (const id of ["transcendent", "duality", "physical", "special", "life"])
+    assert.ok(!shown.taxa[id], `${id} leaked`);
+  // What is left is a valid tree: every parent that survives is present.
+  for (const taxon of Object.values(shown.taxa))
+    if (taxon.parentId) assert.ok(shown.taxa[taxon.parentId], `${taxon.name} is orphaned`);
+});
+
+check("discovering a dragon reveals its branch and nothing more", () => {
+  const save = newGame(pack, NOW);
+  const found = { ...save, discovered: [...save.discovered, "perfection-dragon"] };
+  const shown = redactPack(pack, found, false);
+  assert.ok(shown.species["perfection-dragon"]);
+  assert.ok(shown.taxa["duality"], "its own branch should appear");
+  assert.ok(shown.taxa["transcendent"], "and the branch above it");
+  assert.ok(!shown.taxa["physical"], "but not a sibling branch");
+  assert.ok(!shown.species["ether-dragon"], "nor a neighbour dragon");
+});
+
+check("a designer sees everything", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), true);
+  assert.strictEqual(Object.keys(shown.species).length, Object.keys(pack.species).length);
+  assert.strictEqual(shown.breedingRules.length, pack.breedingRules.length);
+  assert.ok(shown.complete);
+});
+
+check("progress can still be counted without naming anything", () => {
+  const shown = redactPack(pack, newGame(pack, NOW), false);
+  assert.strictEqual(shown.totalSpecies, Object.keys(pack.species).length);
+});
+
 console.log("\nAction dispatcher");
 const ctx = (isAdmin = false) => ({ now: NOW, rng: () => 0.5, isAdmin });
 
@@ -1232,6 +1289,45 @@ check("designer actions are refused without admin", () => {
   // The same actions succeed for a designer.
   const granted = applyAction(pack, save, { type: "revealCodex" }, ctx(true));
   assert.ok(granted.ok);
+});
+
+check("a stale admin flag is ignored for a non-designer", () => {
+  // A save carrying adminMode from an account that had it, now in the hands of
+  // one that does not.
+  const stale = { ...newGame(pack, NOW), adminMode: true, coins: 0, food: 0 };
+
+  const bought = applyAction(pack, stale, { type: "buySpecies", speciesId: "fire-dragon" }, ctx(false));
+  assert.ok(!bought.ok, "free purchase went through on a stale flag");
+  assert.strictEqual(bought.save.adminMode, false, "the flag should be cleared");
+
+  // And the clearing sticks, rather than being recomputed each time.
+  const again = applyAction(pack, bought.save, { type: "collectCoins" }, ctx(false));
+  assert.strictEqual(again.save.adminMode, false);
+
+  // A designer keeps it.
+  const kept = applyAction(pack, stale, { type: "collectCoins" }, ctx(true));
+  assert.strictEqual(kept.save.adminMode, true);
+});
+
+check("a stale flag cannot skip timers or fill the roost", () => {
+  const stale = { ...newGame(pack, NOW), adminMode: true, roostCapacity: 2 };
+  const [a, b] = stale.dragons;
+  const bred = applyAction(pack, stale, { type: "breed", parentA: a.id, parentB: b.id }, ctx(false));
+  assert.ok(!bred.ok, "a full roost should have blocked this");
+
+  const withEgg = {
+    ...stale,
+    roostCapacity: 9,
+    breeding: {
+      parentA: a.id,
+      parentB: b.id,
+      startedAt: NOW,
+      readyAt: NOW + 3_600_000,
+      resultSpeciesId: "fire-dragon",
+    },
+  };
+  const early = applyAction(pack, withEgg, { type: "hatch" }, ctx(false));
+  assert.ok(!early.ok, "the egg was not ready");
 });
 
 check("free text is capped", () => {

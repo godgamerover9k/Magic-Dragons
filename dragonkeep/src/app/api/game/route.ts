@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { applyAction, type Action } from "@/game/actions";
+import { applyAction, withAdminChecked, type Action } from "@/game/actions";
 import { defaultContentPack } from "@/game/content";
 import { newGame, settle } from "@/game/engine";
+import { redactPack } from "@/game/redact";
 import { migrateSave } from "@/game/storage";
 import type { SaveGame } from "@/game/types";
 import {
@@ -78,36 +79,74 @@ export async function POST(request: Request) {
 
   // Elapsed time is folded in from the stored timestamps, so a client cannot
   // claim to have been away longer than it was.
-  const current = settle(pack, await loadSave(user.id, pack), now);
+  const isAdmin = isAdminEmail(user.email);
+  const current = withAdminChecked(
+    settle(pack, await loadSave(user.id, pack), now),
+    isAdmin,
+  );
 
-  const result = applyAction(pack, current, action, {
-    now,
-    rng: secureRandom,
-    isAdmin: isAdminEmail(user.email),
-  });
+  const result = applyAction(pack, current, action, { now, rng: secureRandom, isAdmin });
 
-  if (!result.ok)
-    return NextResponse.json({ ok: false, message: result.message, save: current });
+  if (!result.ok) {
+    // Even a refusal persists the cleared flag, so a stale claim cannot linger.
+    if (current.adminMode !== undefined) await storeSave(user.id, current);
+    return NextResponse.json({
+      ok: false,
+      message: result.message,
+      save: current,
+      pack: redactPack(pack, current, isAdmin),
+    });
+  }
 
   await storeSave(user.id, result.save);
-  return NextResponse.json({ ok: true, message: result.message, save: result.save });
+  return NextResponse.json({
+    ok: true,
+    message: result.message,
+    save: result.save,
+    // Sent back every time: hatching something new widens what may be seen.
+    pack: redactPack(pack, result.save, isAdmin),
+  });
 }
 
 /** Returns the save the server holds, creating one on a first visit. */
 export async function GET(request: Request) {
+  const pack = defaultContentPack();
+
+  // No Supabase configured at all: this is someone running the game themselves,
+  // so there is nobody to hide anything from.
   if (!serverConfigured)
-    return NextResponse.json({ error: "Server is not configured." }, { status: 503 });
+    return NextResponse.json({
+      ok: true,
+      mode: "local",
+      save: null,
+      isAdmin: true,
+      pack: redactPack(pack, null, true),
+    });
 
   const user = await userFromToken(bearer(request));
-  if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const pack = defaultContentPack();
-  const save = settle(pack, await loadSave(user.id, pack), Date.now());
+  // Signed out, but accounts exist. Only the shop is public.
+  if (!user)
+    return NextResponse.json({
+      ok: true,
+      mode: "signedOut",
+      save: null,
+      isAdmin: false,
+      pack: redactPack(pack, null, false),
+    });
+
+  const isAdmin = isAdminEmail(user.email);
+  const save = withAdminChecked(
+    settle(pack, await loadSave(user.id, pack), Date.now()),
+    isAdmin,
+  );
   await storeSave(user.id, save);
 
   return NextResponse.json({
     ok: true,
+    mode: "account",
     save,
-    isAdmin: isAdminEmail(user.email),
+    isAdmin,
+    pack: redactPack(pack, save, isAdmin),
   });
 }

@@ -1,5 +1,5 @@
 import { buildPool, rollPool } from "./breeding";
-import { SCHEMA_VERSION } from "./content";
+import { SCHEMA_VERSION } from "./schema";
 import {
   batchById,
   coinCap,

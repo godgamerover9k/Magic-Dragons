@@ -305,12 +305,23 @@ the refusal is what protects it.
 Local play, with no Supabase keys set, runs the same dispatcher in the browser
 against localStorage. Admin is open there because it is your own machine.
 
-### What this does not cover
+### What a player is allowed to know
 
-The content pack still ships to the browser, so a determined player can read
-every dragon, rule and weight out of the JavaScript bundle. Hiding that needs
-the pack kept server-side and only discovered species sent down - a separate
-change.
+`pack.json` never reaches the browser. `src/game/content.ts` is server-only, and
+the client starts with an empty pack, filling it from `/api/game` with a slice
+cut to what has been unlocked:
+
+- **Dragons** - only those discovered, currently owned, on sale, or inside an egg
+- **Branches** - only those holding something visible, re-rooted so the tree
+  stays valid
+- **Breeding rules** - none at all. Not the weights, not the conditions, not the
+  names of what they produce.
+
+Hatching something new widens the slice, which is why every action reply carries
+a fresh pack. A designer gets the whole thing.
+
+The build is checked for this: grep the client chunks for any dragon name and
+they come back empty.
 
 ## Accounts
 

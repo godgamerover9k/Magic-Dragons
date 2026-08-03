@@ -87,12 +87,25 @@ const fail = (save: SaveGame, message: string): ActionResult => ({
 const NICKNAME_MAX = 40;
 const NOTES_MAX = 500;
 
+/**
+ * Admin mode is stored in the save, which means it can outlive the account that
+ * switched it on — a designer's save handed to a guest, say. It is therefore
+ * treated as a claim rather than a fact: unless the caller is a designer right
+ * now, the flag is cleared before anything reads it.
+ */
+export function withAdminChecked(save: SaveGame, isAdmin: boolean): SaveGame {
+  if (isAdmin || !save.adminMode) return save;
+  return { ...save, adminMode: false };
+}
+
 export function applyAction(
   pack: ContentPack,
-  save: SaveGame,
+  rawSave: SaveGame,
   action: Action,
   ctx: ActionContext,
 ): ActionResult {
+  const save = withAdminChecked(rawSave, ctx.isAdmin);
+
   if (ADMIN_ACTIONS.has(action.type) && !ctx.isAdmin)
     return fail(save, "That is not available on this account.");
 

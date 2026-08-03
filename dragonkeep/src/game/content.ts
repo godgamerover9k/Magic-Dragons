@@ -1,6 +1,10 @@
 import packJson from "./pack.json";
 import type { ContentPack } from "./types";
 
+// SERVER ONLY. Importing this anywhere the browser can reach puts every dragon,
+// branch and breeding weight into the shipped bundle. The client gets its pack
+// from /api/game instead, already filtered to what has been unlocked.
+
 // ---------------------------------------------------------------------------
 // The shipped content lives in pack.json, not in this file.
 //
@@ -12,8 +16,7 @@ import type { ContentPack } from "./types";
 // played — see loadPack in storage.ts.
 // ---------------------------------------------------------------------------
 
-/** Bumped only when the SHAPE of a pack changes and old saves need migrating. */
-export const SCHEMA_VERSION = 3;
+export { SCHEMA_VERSION } from "./schema";
 
 const shipped = packJson as unknown as ContentPack;
 

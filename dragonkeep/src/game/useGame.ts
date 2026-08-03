@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cloudEnabled, supabase } from "@/lib/supabase";
 import { applyAction, type Action } from "./actions";
 import { currentAccount, type Account } from "./cloud";
-import { defaultContentPack } from "./content";
+import { EMPTY_PACK } from "./emptyPack";
 import { newGame, settle } from "./engine";
-import { fetchRemoteSave, sendAction } from "./remote";
-import { clearAll, loadPack, loadSave, migrateSave, savePack, writeSave } from "./storage";
-import type { ContentPack, SaveGame } from "./types";
+import type { RedactedPack } from "./redact";
+import { bootstrap, sendAction } from "./remote";
+import { loadSave, migrateSave, writeSave } from "./storage";
+import type { SaveGame } from "./types";
 
 export interface Toast {
   id: number;
@@ -25,7 +26,9 @@ export interface Toast {
 //                anyone running this themselves.
 
 export function useGame() {
-  const [pack, setPack] = useState<ContentPack>(() => defaultContentPack());
+  // Starts empty. The browser bundle contains no dragons at all; everything
+  // below arrives from the server, already filtered to what has been unlocked.
+  const [pack, setPack] = useState<RedactedPack>(EMPTY_PACK);
   const [save, setSave] = useState<SaveGame | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -45,22 +48,23 @@ export function useGame() {
   }, []);
 
   const boot = useCallback(async () => {
-    const loadedPack = loadPack();
     const acct = cloudEnabled ? await currentAccount() : null;
+    const server = await bootstrap();
+    const loadedPack = server.pack ?? EMPTY_PACK;
 
-    if (acct) {
-      const { save: fromServer, isAdmin: serverAdmin } = await fetchRemoteSave();
-      return { loadedPack, acct, save: fromServer, serverAdmin };
-    }
+    // Signed in: the server holds the save and sent it.
+    if (acct && server.save)
+      return { loadedPack, acct, save: server.save, serverAdmin: server.isAdmin };
 
-    // Local play. Admin is open here because it is the developer's own machine.
+    // Local play, or signed out. The save lives in this browser, but the pack
+    // still came from the server.
     const local = loadSave();
     const chosen = local ? migrateSave(loadedPack, local) : newGame(loadedPack);
     return {
       loadedPack,
-      acct: null,
+      acct,
       save: settle(loadedPack, chosen),
-      serverAdmin: !cloudEnabled,
+      serverAdmin: server.isAdmin,
     };
   }, []);
 
@@ -108,11 +112,6 @@ export function useGame() {
     return () => clearTimeout(t);
   }, [save, ready, remote]);
 
-  useEffect(() => {
-    if (!ready) return;
-    savePack(pack);
-  }, [pack, ready]);
-
   /**
    * Runs an action. Signed in, it goes to the server and the reply replaces the
    * save — so a refusal leaves the player exactly where the server says they
@@ -125,6 +124,8 @@ export function useGame() {
         const result = await sendAction(action);
         setBusy(false);
         if (result.save) setSave(result.save);
+        // Discovering something widens what the server is willing to send.
+        if (result.pack) setPack(result.pack);
         if (!quiet || !result.ok) notify(result.message, result.ok);
         return result.ok ? result.save : null;
       }
@@ -147,13 +148,14 @@ export function useGame() {
     [remote, pack, isAdmin, notify],
   );
 
-  const resetEverything = useCallback(() => {
-    clearAll();
-    const fresh = defaultContentPack();
-    setPack(fresh);
-    if (!remote) setSave(newGame(fresh));
-    notify("Content reset to the shipped pack.");
-  }, [remote, notify]);
+  const reload = useCallback(async () => {
+    const result = await boot();
+    setPack(result.loadedPack);
+    setAccount(result.acct);
+    setIsAdmin(result.serverAdmin);
+    setSave(result.save);
+    notify("Reloaded from the server.");
+  }, [boot, notify]);
 
   return useMemo(
     () => ({
@@ -170,9 +172,9 @@ export function useGame() {
       toasts,
       notify,
       act,
-      resetEverything,
+      reload,
     }),
-    [pack, save, account, isAdmin, remote, busy, now, ready, toasts, notify, act, resetEverything],
+    [pack, save, account, isAdmin, remote, busy, now, ready, toasts, notify, act, reload],
   );
 }
 
