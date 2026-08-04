@@ -324,9 +324,12 @@ A merge keeps the best of everything that went into it — the highest level and
 the highest individual value of the whole group, not the target's own. Feeding
 your best duplicate into a merge therefore costs nothing.
 
-By default the least developed duplicates are taken. The Roost card also lists
-every eligible duplicate so a player can choose exactly which ones go in; the
-server checks the count and refuses anything locked or of the wrong tier.
+Which dragons go in is always the player's choice - the Roost card lists every
+eligible duplicate and the merge is refused until exactly the right number are
+ticked. A merge destroys dragons, so nothing is picked on their behalf.
+
+Feeding in a dragon that is minding an egg ends that breeding, and the interface
+says so before it happens.
 
 ## Perches and storage
 

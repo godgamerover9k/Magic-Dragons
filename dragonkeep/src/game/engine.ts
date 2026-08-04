@@ -433,27 +433,25 @@ export function merge(
 
   const fodder = eligibleFodder(save.dragons, target);
 
-  let consumed: Dragon[];
-  if (use && use.length > 0) {
-    const chosen = use
-      .map((id) => fodder.find((d) => d.id === id))
-      .filter(Boolean) as Dragon[];
-    if (chosen.length !== use.length)
-      return fail(save, "One of those cannot be merged in.");
-    if (chosen.length !== cost)
-      return fail(save, `Pick exactly ${cost} to merge in — you chose ${chosen.length}.`);
-    consumed = chosen;
-  } else {
-    if (fodder.length < cost)
-      return fail(
-        save,
-        `Needs ${cost} unlocked duplicates at tier ${target.tier} — you have ${fodder.length}.`,
-      );
-    // Least developed first, since the best of the group is kept either way.
-    consumed = [...fodder]
-      .sort((x, y) => x.level - y.level || (x.iv ?? 0) - (y.iv ?? 0))
-      .slice(0, cost);
-  }
+  if (fodder.length < cost)
+    return fail(
+      save,
+      `Needs ${cost} unlocked duplicates at tier ${target.tier} — you have ${fodder.length}.`,
+    );
+
+  // Which dragons go in is always the player's call. Nothing is chosen for them:
+  // a merge destroys dragons, and picking silently would eventually destroy one
+  // somebody wanted.
+  if (!use || use.length === 0)
+    return fail(save, `Choose ${cost} duplicates to merge in.`);
+
+  const consumed = use
+    .map((id) => fodder.find((d) => d.id === id))
+    .filter(Boolean) as Dragon[];
+  if (consumed.length !== use.length)
+    return fail(save, "One of those cannot be merged in.");
+  if (consumed.length !== cost)
+    return fail(save, `Choose exactly ${cost} to merge in — you chose ${consumed.length}.`);
 
   const consumedIds = new Set(consumed.map((d) => d.id));
   const group = [target, ...consumed];
@@ -471,15 +469,25 @@ export function merge(
   if (upgraded.level > target.level) gained.push(`level ${upgraded.level}`);
   if ((upgraded.iv ?? 0) > (target.iv ?? 0)) gained.push(`${pack.iv.name} ${upgraded.iv}`);
 
+  // A consumed dragon cannot go on minding an egg.
+  const kept = nestsOf(save).filter(
+    (n) => !consumedIds.has(n.parentA) && !consumedIds.has(n.parentB),
+  );
+  const lost = nestsOf(save).length - kept.length;
+
   return {
     save: {
       ...save,
+      breeding: null,
+      nests: kept,
       dragons: save.dragons
         .filter((d) => !consumedIds.has(d.id))
         .map((d) => (d.id === targetId ? upgraded : d)),
     },
     ok: true,
-    message: gained.length
+    message: lost > 0
+      ? `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}. ${lost === 1 ? "An egg was" : `${lost} eggs were`} lost.`
+      : gained.length
       ? `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}, taking ${gained.join(" and ")}.`
       : `${nameOf(pack, upgraded)} is now tier ${upgraded.tier}.`,
   };

@@ -4,6 +4,7 @@ import { defaultContentPack } from "../src/game/content";
 import {
   coinCap,
   coinsPerHour,
+  eligibleFodder,
   foodToNextLevel,
   hoursToFill,
   marketCooldownLeft,
@@ -2048,7 +2049,8 @@ check("fusing keeps the best level and IV of the group", () => {
   const sharp = { ...make("fire-dragon"), id: "sharp", level: 2, iv: 28 };
   save = { ...save, dragons: [target, strong, sharp] };
 
-  const r = applyAction(pack, save, { type: "merge", dragonId: target.id }, ctx());
+  const use = eligibleFodder(save.dragons, target).map((d) => d.id);
+  const r = applyAction(pack, save, { type: "merge", dragonId: target.id, use }, ctx());
   assert.ok(r.ok, r.message);
   const merged = r.save.dragons.find((d) => d.id === target.id)!;
   assert.strictEqual(merged.tier, 2);
@@ -2093,6 +2095,41 @@ check("a locked dragon cannot be chosen", () => {
   assert.ok(!r.ok);
 });
 
+check("a merge with no choice is refused", () => {
+  let save = seeded(["fire-dragon"]);
+  const target = save.dragons[0];
+  const extras = [1, 2].map((n) => ({ ...make("fire-dragon"), id: `dupe${n}` }));
+  save = { ...save, dragons: [target, ...extras] };
+
+  const r = applyAction(pack, save, { type: "merge", dragonId: target.id }, ctx());
+  assert.ok(!r.ok, "it picked dragons on the player's behalf");
+  assert.match(r.message, /Choose/);
+  assert.strictEqual(r.save.dragons.length, 3, "nothing was destroyed");
+});
+
+check("merging away a sitting parent ends its egg", () => {
+  let save = { ...seeded(["fire-dragon", "earth-dragon"]), roostCapacity: 9 };
+  const [fire, earth] = save.dragons;
+  const bred = applyAction(pack, save, { type: "breed", parentA: fire.id, parentB: earth.id }, ctx());
+  assert.strictEqual(nestsOf(bred.save).length, 1);
+
+  // Two more fires so the sitting one can be fed into a merge.
+  save = bred.save;
+  for (const id of ["spareA", "spareB"])
+    save = { ...save, dragons: [...save.dragons, { ...make("fire-dragon"), id }] };
+
+  const cost = mergeCost(pack, save.dragons.find((d) => d.id === "spareA")!)!;
+  const use = [fire.id, "spareB"].slice(0, cost);
+  const merged = applyAction(
+    pack, save,
+    { type: "merge", dragonId: "spareA", use },
+    ctx(),
+  );
+  assert.ok(merged.ok, merged.message);
+  assert.strictEqual(nestsOf(merged.save).length, 0, "the egg outlived its parent");
+  assert.match(merged.message, /egg/);
+});
+
 check("merging consumes exactly the required duplicates", () => {
   let save = seeded();
   const target = save.dragons[0];
@@ -2101,7 +2138,7 @@ check("merging consumes exactly the required duplicates", () => {
     save = { ...save, dragons: [...save.dragons, make(target.speciesId)] };
   }
   const before = save.dragons.length;
-  const r = merge(pack, save, target.id);
+  const r = merge(pack, save, target.id, eligibleFodder(save.dragons, target).slice(0, cost).map((d) => d.id));
   assert.ok(r.ok, r.message);
   assert.strictEqual(r.save.dragons.length, before - cost);
   assert.strictEqual(r.save.dragons.find((d) => d.id === target.id)!.tier, 2);
@@ -2116,7 +2153,7 @@ check("merging eats the weakest duplicates first", () => {
   save = { ...save, dragons: [...save.dragons, strong, weak] };
   const cost = mergeCost(pack, target)!;
   assert.strictEqual(cost, 2, "base set expects 2 duplicates for tier 2");
-  const r = merge(pack, save, target.id);
+  const r = merge(pack, save, target.id, eligibleFodder(save.dragons, target).slice(0, cost).map((d) => d.id));
   assert.ok(r.ok, r.message);
   assert.ok(!r.save.dragons.some((d) => d.id === "eat-me"));
 });

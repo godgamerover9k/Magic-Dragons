@@ -138,6 +138,10 @@ function DragonCard({
   const { pack, save, now, act } = game;
   const [confirmRelease, setConfirmRelease] = useState(false);
   const [chosen, setChosen] = useState<string[]>([]);
+  // Held locally while typing. Sending every keystroke to the server made the
+  // field unusable; it is committed when the field loses focus.
+  const [nickname, setNickname] = useState(dragon.nickname ?? "");
+  const [notes, setNotes] = useState(dragon.notes);
   const species = speciesOf(pack, dragon);
   const color = colorOf(pack, dragon.speciesId);
   if (!save || !species) return null;
@@ -256,9 +260,9 @@ function DragonCard({
             {cost !== null && fodder.length > 0 && (
               <div className="mb-2 space-y-1">
                 <p className="text-[11px] text-muted">
-                  Pick {cost} to merge in, or leave it and the least developed are
-                  taken. The survivor keeps the best level and{" "}
-                  {pack.iv.name.toLowerCase()} of the whole group.
+                  Pick {cost} to merge in. The survivor keeps the best level and{" "}
+                  {pack.iv.name.toLowerCase()} of the whole group, so there is no reason
+                  to hold your best one back.
                 </p>
                 {fodder.map((d) => {
                   const picked = chosen.includes(d.id);
@@ -281,13 +285,16 @@ function DragonCard({
                         {picked ? "✓" : ""}
                       </span>
                       <span className="min-w-0 flex-1 truncate">{nameOf(pack, d)}</span>
+                      {nestsWith(save, d.id).length > 0 && (
+                        <span className="eyebrow shrink-0 text-warn">on an egg</span>
+                      )}
                       <span className="num shrink-0 text-muted">
                         L{d.level} · IV {d.iv}
                       </span>
                     </button>
                   );
                 })}
-                {chosen.length > 0 && chosen.length !== cost && (
+                {chosen.length !== cost && (
                   <p className="text-[11px] text-warn">
                     {chosen.length} picked, {cost} needed.
                   </p>
@@ -305,18 +312,18 @@ function DragonCard({
               <Button
                 variant="solid"
                 onClick={() => {
-                  act({
-                    type: "merge",
-                    dragonId: dragon.id,
-                    use: chosen.length === cost ? chosen : undefined,
-                  });
+                  const sitters = chosen.filter((id) => nestsWith(save, id).length > 0);
+                  if (
+                    sitters.length > 0 &&
+                    !confirm(
+                      `${sitters.length === 1 ? "One of those dragons is" : `${sitters.length} of those dragons are`} minding an egg. Merging destroys them and the ${sitters.length === 1 ? "egg is" : "eggs are"} lost. Continue?`,
+                    )
+                  )
+                    return;
+                  act({ type: "merge", dragonId: dragon.id, use: chosen });
                   setChosen([]);
                 }}
-                disabled={
-                  cost === null ||
-                  fodder.length < cost ||
-                  (chosen.length > 0 && chosen.length !== cost)
-                }
+                disabled={cost === null || chosen.length !== cost}
               >
                 Merge to tier {dragon.tier + 1}
               </Button>
@@ -364,21 +371,28 @@ function DragonCard({
             <label className="block">
               <span className="eyebrow mb-1 block">Nickname</span>
               <input
-                value={dragon.nickname ?? ""}
+                value={nickname}
                 placeholder={species.name}
-                onChange={(e) =>
-                  act({ type: "renameDragon", dragonId: dragon.id, nickname: e.target.value || null }, true)
-                }
+                onChange={(e) => setNickname(e.target.value)}
+                onBlur={() => {
+                  if (nickname === (dragon.nickname ?? "")) return;
+                  act(
+                    { type: "renameDragon", dragonId: dragon.id, nickname: nickname || null },
+                    true,
+                  );
+                }}
               />
             </label>
             <label className="block">
               <span className="eyebrow mb-1 block">Notes</span>
               <input
-                value={dragon.notes}
+                value={notes}
                 placeholder="Anything worth remembering"
-                onChange={(e) =>
-                  act({ type: "noteDragon", dragonId: dragon.id, notes: e.target.value }, true)
-                }
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => {
+                  if (notes === dragon.notes) return;
+                  act({ type: "noteDragon", dragonId: dragon.id, notes }, true);
+                }}
               />
             </label>
           </div>
