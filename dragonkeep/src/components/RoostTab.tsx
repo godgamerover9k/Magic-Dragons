@@ -120,10 +120,6 @@ export function RoostTab({ game }: { game: Game }) {
         </>
       )}
 
-      <p className="px-1 text-[11px] text-muted">
-        Coins bank for {pack.balance.coinStorageHours} hours, then stop. Collect from the
-        bar above.
-      </p>
     </div>
   );
 }
